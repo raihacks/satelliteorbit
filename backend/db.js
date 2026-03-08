@@ -2,6 +2,7 @@ const mysql = require("mysql2");
 
 const {
   DATABASE_URL,
+  MYSQL_URL,
   DB_HOST = "localhost",
   DB_PORT = "3306",
   DB_USER = "root",
@@ -10,10 +11,11 @@ const {
   DB_SSL = "false"
 } = process.env;
 
-const useSsl = DB_SSL === "true";
+const connectionUri = DATABASE_URL || MYSQL_URL;
+const useSsl = ["1", "true", "required"].includes(String(DB_SSL).toLowerCase());
 
-const db = DATABASE_URL
-  ? mysql.createPool(DATABASE_URL)
+const db = connectionUri
+  ? mysql.createPool(connectionUri)
   : mysql.createPool({
       host: DB_HOST,
       port: Number(DB_PORT),
@@ -33,8 +35,14 @@ function checkConnection() {
       return;
     }
 
-    console.log("Database pool connected");
-    connection.release();
+        connection.ping((pingErr) => {
+      if (pingErr) {
+        console.error("DB ping failed:", pingErr.message);
+      } else {
+        console.log("Database pool connected");
+      }
+      connection.release();
+    });
   });
 }
 

@@ -12,5 +12,8 @@
     "express": "^5.2.1",
     "mysql2": "^3.16.1",
     "satellite.js": "^6.0.2"
+ },
+  "engines": {
+    "node": ">=20"
   }
 }
