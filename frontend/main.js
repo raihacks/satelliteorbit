@@ -147,8 +147,8 @@ window.addEventListener("mousemove", e => {
   const dx = e.clientX - previous.x;
   const dy = e.clientY - previous.y;
 
-  earth.rotation.y += dx * 0.005;
-  earth.rotation.x += dy * 0.003;
+  earthSystem.rotation.y += dx * 0.005;
+  earthSystem.rotation.x += dy * 0.003;
 
   previous = { x: e.clientX, y: e.clientY };
 });
@@ -214,7 +214,7 @@ async function renderSatellitePosition(norad) {
   marker.position.copy(pos);
   halo.position.copy(pos);
 
-  halo.lookAt(new THREE.Vector3(0, 0, 0));
+  halo.lookAt(earth.position);
 
   marker.visible = true;
   halo.visible = true;
