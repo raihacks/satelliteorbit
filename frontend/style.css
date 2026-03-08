@@ -115,6 +115,11 @@ button:hover {
   background: rgba(8, 18, 39, 0.7);
   color: #dbe8ff;
   padding: 4px 10px;
+  cursor: pointer;
+}
+
+.sat-pill:hover {
+  filter: brightness(1.15);
 }
 
 .sat-pill.active {
