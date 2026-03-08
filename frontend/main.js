@@ -7,7 +7,8 @@ const lonEl = document.getElementById("longitude");
 const altEl = document.getElementById("altitude");
 
 const EARTH_RADIUS = 4;
-const API_BASE = `${window.location.origin}/api/satellite`;
+const runtimeApiBase = window.__API_BASE__ || document.querySelector("meta[name=api-base]")?.content;
+const API_BASE = (runtimeApiBase || `${window.location.origin}/api`).replace(/\/$/, "") + "/satellite";
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1200);
@@ -33,19 +34,6 @@ const stars = new THREE.Points(
   ),
   new THREE.PointsMaterial({ color: 0x8ab4ff, size: 0.9 })
 );
-scene.add(stars);
-
-const textureLoader = new THREE.TextureLoader();
-const earth = new THREE.Mesh(
-  new THREE.SphereGeometry(EARTH_RADIUS, 64, 64),
-  new THREE.MeshPhongMaterial({ map: textureLoader.load("earth.png") })
-);
-scene.add(earth);
-
-const marker = new THREE.Mesh(
-  new THREE.SphereGeometry(0.08, 16, 16),
-  new THREE.MeshBasicMaterial({ color: 0xff5e57 })
-);
 scene.add(marker);
 marker.visible = false;
 
@@ -70,6 +58,8 @@ function latLonToVector3(lat, lon, altitudeKm = 0) {
 
 let dragging = false;
 let previous = { x: 0, y: 0 };
+let trackingIntervalId = null;
+let activeNorad = null;
 
 window.addEventListener("mousedown", event => {
   dragging = true;
@@ -114,6 +104,28 @@ function updateTelemetry(lat, lon, alt) {
   altEl.textContent = `${alt.toFixed(1)} km`;
 }
 
+async function fetchSatellitePosition(norad) {
+  const response = await fetch(`${API_BASE}/${norad}`);
+  if (!response.ok) {
+    throw new Error(response.status === 404 ? "Satellite not found in database." : `API error (${response.status}).`);
+  }
+
+  return response.json();
+}
+
+async function renderSatellitePosition(norad) {
+  const data = await fetchSatellitePosition(norad);
+  updateTelemetry(data.latitude, data.longitude, data.altitude_km);
+
+  const position = latLonToVector3(data.latitude, data.longitude, data.altitude_km);
+  marker.position.copy(position);
+  halo.position.copy(position);
+  halo.lookAt(new THREE.Vector3(0, 0, 0));
+
+  marker.visible = true;
+  halo.visible = true;
+}
+
 async function trackSatellite() {
   const norad = noradInput.value.trim();
   if (!/^\d+$/.test(norad)) {
@@ -121,39 +133,28 @@ async function trackSatellite() {
     return;
   }
 
+  if (trackingIntervalId) {
+    clearInterval(trackingIntervalId);
+    trackingIntervalId = null;
+  }
+
+  activeNorad = norad;
   setStatus(`Tracking NORAD ${norad}...`);
 
   try {
-    setInterval(async () => {
-  const response = await fetch(`${API_BASE}/${norad}`);
-  const data = await response.json();
+    await renderSatellitePosition(norad);
 
-  updateTelemetry(data.latitude, data.longitude, data.altitude_km);
+    trackingIntervalId = window.setInterval(async () => {
+      if (activeNorad !== norad) {
+        return;
+      }
 
-  const position = latLonToVector3(
-    data.latitude,
-    data.longitude,
-    data.altitude_km
-  );
-
-  marker.position.copy(position);
-  halo.position.copy(position);
-
-}, 3000);
-    if (!response.ok) {
-      throw new Error(response.status === 404 ? "Satellite not found in database." : `API error (${response.status}).`);
-    }
-
-    const data = await response.json();
-    updateTelemetry(data.latitude, data.longitude, data.altitude_km);
-
-    const position = latLonToVector3(data.latitude, data.longitude, data.altitude_km);
-    marker.position.copy(position);
-    halo.position.copy(position);
-    halo.lookAt(new THREE.Vector3(0, 0, 0));
-
-    marker.visible = true;
-    halo.visible = true;
+      try {
+        await renderSatellitePosition(norad);
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    }, 3000);
 
     const params = new URLSearchParams(window.location.search);
     params.set("norad-id", norad);
