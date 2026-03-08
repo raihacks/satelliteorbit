@@ -3,7 +3,7 @@ const cors = require("cors");
 const path = require("path");
 
 const satelliteRoute = require("./satelliteRoute");
-const { checkConnection } = require("./db");
+const { checkConnection, initializeDatabase } = require("./db");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -27,7 +27,18 @@ app.get(/^(?!\/api).*/, (_req, res) => {
   res.sendFile(path.join(__dirname, "..", "frontend", "index.html"));
 });
 
-app.listen(PORT, () => {
-  console.log(`Backend running on port ${PORT}`);
-  checkConnection();
-});
+async function bootstrap() {
+  try {
+    await checkConnection();
+    await initializeDatabase();
+
+    app.listen(PORT, () => {
+      console.log(`Backend running on port ${PORT}`);
+    });
+  } catch (error) {
+    console.error("Failed to start server:", error.message);
+    process.exit(1);
+  }
+}
+
+bootstrap();

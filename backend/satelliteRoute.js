@@ -6,7 +6,7 @@ const router = express.Router();
 const EARTH_RADIUS_KM = 6371;
 
 function deg(rad) {
-  return rad * 180 / Math.PI;
+  return (rad * 180) / Math.PI;
 }
 
 function parseNorad(value) {
@@ -14,17 +14,13 @@ function parseNorad(value) {
   return Number.isInteger(id) && id > 0 ? id : null;
 }
 
-function getTleByNorad(noradId) {
-  return new Promise((resolve, reject) => {
-    db.query(
-      "SELECT tle_line1, tle_line2 FROM tle_data WHERE norad_id = ? LIMIT 1",
-      [noradId],
-      (err, rows) => {
-        if (err) return reject(err);
-        resolve(rows?.[0] ?? null);
-      }
-    );
-  });
+async function getTleByNorad(noradId) {
+  const [rows] = await db.query(
+    "SELECT tle_line1, tle_line2 FROM tle_data WHERE norad_id = ? LIMIT 1",
+    [noradId]
+  );
+
+  return rows?.[0] ?? null;
 }
 
 function computeGeoPoint(satrec, time) {
@@ -42,38 +38,24 @@ function computeGeoPoint(satrec, time) {
   };
 }
 
-/////////////////////////////////////////////////
-// ADD SATELLITE
-/////////////////////////////////////////////////
-
-router.post("/satellite", async (req, res) => {
+router.post("/", async (req, res) => {
   const { name, norad_id, orbit_type, inclination, period } = req.body;
 
   try {
-    const sql = `
+    const [result] = await db.query(
+      `
       INSERT INTO satellites (name, norad_id, orbit_type, inclination, period)
       VALUES (?, ?, ?, ?, ?)
-    `;
-
-    const [result] = await db.query(sql, [
-      name,
-      norad_id,
-      orbit_type,
-      inclination,
-      period
-    ]);
+    `,
+      [name, norad_id, orbit_type, inclination, period]
+    );
 
     res.json({ message: "Satellite added", id: result.insertId });
-
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Database error" });
   }
 });
-
-/////////////////////////////////////////////////
-// CURRENT POSITION
-/////////////////////////////////////////////////
 
 router.get("/:norad", async (req, res) => {
   const noradId = parseNorad(req.params.norad);
@@ -103,16 +85,11 @@ router.get("/:norad", async (req, res) => {
       timestamp: now.toISOString(),
       ...point
     });
-
   } catch (error) {
     console.error("Satellite lookup failed:", error.message);
     res.status(500).json({ error: "Database error" });
   }
 });
-
-/////////////////////////////////////////////////
-// ORBIT PATH
-/////////////////////////////////////////////////
 
 router.get("/:norad/orbit", async (req, res) => {
   const noradId = parseNorad(req.params.norad);
@@ -125,7 +102,6 @@ router.get("/:norad/orbit", async (req, res) => {
   }
 
   try {
-
     const tle = await getTleByNorad(noradId);
 
     if (!tle) {
@@ -138,9 +114,7 @@ router.get("/:norad/orbit", async (req, res) => {
     const points = [];
 
     for (let i = 0; i < samples; i++) {
-
       const time = new Date(start + i * stepMinutes * 60 * 1000);
-
       const point = computeGeoPoint(satrec, time);
 
       if (!point) continue;
@@ -150,7 +124,6 @@ router.get("/:norad/orbit", async (req, res) => {
         ...point,
         altitude_ratio: point.altitude_km / EARTH_RADIUS_KM
       });
-
     }
 
     res.json({
@@ -159,7 +132,6 @@ router.get("/:norad/orbit", async (req, res) => {
       stepMinutes,
       points
     });
-
   } catch (error) {
     console.error("Orbit lookup failed:", error.message);
     res.status(500).json({ error: "Database error" });

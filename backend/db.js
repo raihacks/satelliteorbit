@@ -1,5 +1,5 @@
 require("dotenv").config();
-const mysql = require("mysql2");
+const mysql = require("mysql2/promise");
 
 const {
   MYSQL_URL,
@@ -9,54 +9,97 @@ const {
   DB_USER,
   DB_PASSWORD,
   DB_NAME,
-  DB_SSL = "false",
+  DB_SSL,
   MYSQLHOST,
   MYSQLPORT,
   MYSQLUSER,
   MYSQLPASSWORD,
   MYSQLDATABASE,
-  MYSQL_SSL
+  MYSQL_SSL,
+  RAILWAY_STATIC_URL,
+  RAILWAY_PUBLIC_DOMAIN
 } = process.env;
 
-// Railway / cloud connection string
 const connectionUri = MYSQL_URL || DATABASE_URL;
+const isRailwayRuntime = Boolean(RAILWAY_STATIC_URL || RAILWAY_PUBLIC_DOMAIN || MYSQLHOST);
 
-// SSL detection
-const sslFlag = MYSQL_SSL || DB_SSL;
-const useSsl = ["1", "true", "required"].includes(String(sslFlag).toLowerCase());
+function shouldUseSsl() {
+  const sslFlag = MYSQL_SSL ?? DB_SSL;
 
-// Create connection pool
-const db = connectionUri
-  ? mysql.createPool(connectionUri)
-  : mysql.createPool({
-      host: DB_HOST || MYSQLHOST || "centerbeam.proxy.rlwy.net",
-      port: Number(DB_PORT || MYSQLPORT || 44905),
-      user: DB_USER || MYSQLUSER || "root",
-      password: DB_PASSWORD || MYSQLPASSWORD || "zBkJtGXReVesgChFbwyaTmwcASEoSoHm",
-      database: DB_NAME || MYSQLDATABASE || "railway",
-      ssl: useSsl ? { rejectUnauthorized: true } : undefined,
+  if (sslFlag === undefined || sslFlag === null || sslFlag === "") {
+    return isRailwayRuntime;
+  }
+
+  return ["1", "true", "required", "yes"].includes(String(sslFlag).toLowerCase());
+}
+
+function getSslConfig() {
+  return shouldUseSsl() ? { rejectUnauthorized: false } : undefined;
+}
+
+function buildPoolConfig() {
+  if (connectionUri) {
+    return {
+      uri: connectionUri,
+      ssl: getSslConfig(),
       waitForConnections: true,
       connectionLimit: 10,
       queueLimit: 0
-    });
+    };
+  }
 
-// Test connection
-function checkConnection() {
-  db.getConnection((err, connection) => {
-    if (err) {
-      console.error("DB connection failed:", err.message || err.code);
-      return;
-    }
-
-    connection.ping((pingErr) => {
-      if (pingErr) {
-        console.error("DB ping failed:", pingErr.message || pingErr.code);
-      } else {
-        console.log("Database pool connected");
-      }
-      connection.release();
-    });
-  });
+  return {
+    host: DB_HOST || MYSQLHOST || "127.0.0.1",
+    port: Number(DB_PORT || MYSQLPORT || 3306),
+    user: DB_USER || MYSQLUSER || "root",
+    password: DB_PASSWORD || MYSQLPASSWORD || "",
+    database: DB_NAME || MYSQLDATABASE || "railway",
+    ssl: getSslConfig(),
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0
+  };
 }
 
-module.exports = { db, checkConnection };
+const poolConfig = buildPoolConfig();
+const db = poolConfig.uri ? mysql.createPool(poolConfig.uri) : mysql.createPool(poolConfig);
+
+async function checkConnection() {
+  try {
+    const connection = await db.getConnection();
+    await connection.ping();
+    connection.release();
+    console.log("Database pool connected");
+  } catch (error) {
+    console.error("DB connection failed:", error.message || error.code);
+    throw error;
+  }
+}
+
+async function initializeDatabase() {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS satellites (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      norad_id INT NOT NULL UNIQUE,
+      orbit_type VARCHAR(100) DEFAULT NULL,
+      inclination FLOAT DEFAULT NULL,
+      period FLOAT DEFAULT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS tle_data (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      norad_id INT NOT NULL,
+      tle_line1 VARCHAR(255) NOT NULL,
+      tle_line2 VARCHAR(255) NOT NULL,
+      source VARCHAR(50) DEFAULT 'celestrak',
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY unique_norad_tle (norad_id)
+    )
+  `);
+}
+
+module.exports = { db, checkConnection, initializeDatabase };
