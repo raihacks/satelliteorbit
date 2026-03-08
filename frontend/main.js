@@ -58,6 +58,18 @@ const earth = new THREE.Mesh(
 );
 
 earthSystem.add(earth);
+
+const atmosphere = new THREE.Mesh(
+  new THREE.SphereGeometry(EARTH_RADIUS * 1.03, 64, 64),
+  new THREE.MeshBasicMaterial({
+    color: 0x3fa9ff,
+    transparent: true,
+    opacity: 0.25
+  })
+);
+
+earthSystem.add(atmosphere);
+
 /* Stars */
 
 const starPositions = [];
@@ -129,29 +141,14 @@ function latLonToVector3(lat, lon, altitudeKm = 0) {
 
 /* Mouse rotation */
 
-let dragging = false;
-let previous = { x: 0, y: 0 };
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
 
-window.addEventListener("mousedown", e => {
-  dragging = true;
-  previous = { x: e.clientX, y: e.clientY };
-});
-
-window.addEventListener("mouseup", () => {
-  dragging = false;
-});
-
-window.addEventListener("mousemove", e => {
-  if (!dragging) return;
-
-  const dx = e.clientX - previous.x;
-  const dy = e.clientY - previous.y;
-
-  earthSystem.rotation.y += dx * 0.005;
-  earthSystem.rotation.x += dy * 0.003;
-
-  previous = { x: e.clientX, y: e.clientY };
-});
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+controls.rotateSpeed = 0.6;
+controls.zoomSpeed = 0.8;
+controls.minDistance = 6;
+controls.maxDistance = 30;
 
 /* Zoom */
 
@@ -218,6 +215,9 @@ async function renderSatellitePosition(norad) {
 
   marker.visible = true;
   halo.visible = true;
+
+  const orbitRadius = pos.length();
+  createOrbitPath(orbitRadius);
 }
 
 /* Tracking */
@@ -253,6 +253,32 @@ async function trackSatellite() {
   }
 }
 
+function createOrbitPath(radius) {
+  const points = [];
+
+  for (let i = 0; i <= 360; i++) {
+    const angle = THREE.MathUtils.degToRad(i);
+
+    points.push(
+      new THREE.Vector3(
+        radius * Math.cos(angle),
+        0,
+        radius * Math.sin(angle)
+      )
+    );
+  }
+
+  const geometry = new THREE.BufferGeometry().setFromPoints(points);
+
+  const material = new THREE.LineBasicMaterial({
+    color: 0x44aaff
+  });
+
+  const orbit = new THREE.LineLoop(geometry, material);
+
+  earthSystem.add(orbit);
+}
+
 /* Button */
 
 trackBtn.addEventListener("click", trackSatellite);
@@ -267,6 +293,8 @@ noradInput.addEventListener("keydown", e => {
 
 function animate() {
   halo.rotation.z += 0.03;
+
+  controls.update();
 
   renderer.render(scene, camera);
 
