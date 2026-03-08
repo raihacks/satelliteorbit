@@ -268,13 +268,13 @@ noradInput.addEventListener("keydown", e => {
 
 /* Animation */
 
-function animate() {
-  earth.rotation.y += 0.0015;
-  halo.rotation.z += 0.03;
+// function animate() {
+//   earth.rotation.y += 0.0015;
+//   halo.rotation.z += 0.03;
 
-  renderer.render(scene, camera);
+//   renderer.render(scene, camera);
 
-  requestAnimationFrame(animate);
-}
+//   requestAnimationFrame(animate);
+// }
 
-animate();
+// animate();
