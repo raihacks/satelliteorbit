@@ -13,6 +13,10 @@ const EARTH_RADIUS = 4;
 const API_BASE =
   "https://satelliteorbit-production.up.railway.app/api/satellite";
 
+
+  const earthSystem = new THREE.Group();
+  scene.add(earthSystem);
+
 /* Scene */
 
 const scene = new THREE.Scene();
@@ -54,8 +58,7 @@ const earth = new THREE.Mesh(
   new THREE.MeshStandardMaterial({ map: earthTexture })
 );
 
-scene.add(earth);
-
+earthSystem.add(earth);
 /* Stars */
 
 const starPositions = [];
@@ -92,8 +95,7 @@ const marker = new THREE.Mesh(
 
 marker.visible = false;
 
-scene.add(marker);
-
+earthSystem.add(marker);
 /* Halo */
 
 const halo = new THREE.Mesh(
@@ -108,8 +110,7 @@ const halo = new THREE.Mesh(
 
 halo.visible = false;
 
-scene.add(halo);
-
+earthSystem.add(halo);
 /* Convert lat/lon to 3D */
 
 function latLonToVector3(lat, lon, altitudeKm = 0) {
@@ -149,9 +150,6 @@ window.addEventListener("mousemove", e => {
 
   earth.rotation.y += dx * 0.005;
   earth.rotation.x += dy * 0.003;
-
-  marker.rotation.copy(earth.rotation);
-  halo.rotation.copy(earth.rotation);
 
   previous = { x: e.clientX, y: e.clientY };
 });
@@ -269,7 +267,6 @@ noradInput.addEventListener("keydown", e => {
 /* Animation */
 
 function animate() {
-  //earth.rotation.y += 0.0015;
   halo.rotation.z += 0.03;
 
   renderer.render(scene, camera);
