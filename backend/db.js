@@ -106,11 +106,11 @@ function createDisabledDatabaseClient() {
   };
 }
 
-const db = poolConfig
-  ? poolConfig.uri
-    ? mysql.createPool(poolConfig.uri)
-    : mysql.createPool(poolConfig)
-  : createDisabledDatabaseClient();
+//const db = poolConfig
+//  ? poolConfig.uri
+//    ? mysql.createPool(poolConfig.uri)
+//    : mysql.createPool(poolConfig)
+//  : createDisabledDatabaseClient();
 
 async function checkConnection() {
   if (!hasDatabaseConfig) {
