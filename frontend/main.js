@@ -27,6 +27,20 @@ const scene = new THREE.Scene();
 const earthSystem = new THREE.Group();
 scene.add(earthSystem);
 
+const earthGeometry = new THREE.SphereGeometry(EARTH_RADIUS, 64, 64);
+
+const earthMaterial = new THREE.MeshBasicMaterial({
+  color: 0x2233ff,
+  wireframe: true
+});
+
+const earthMesh = new THREE.Mesh(
+  earthGeometry,
+  earthMaterial
+);
+
+earthSystem.add(earthMesh);
+
 const camera = new THREE.PerspectiveCamera(
   70,
   window.innerWidth / window.innerHeight,
