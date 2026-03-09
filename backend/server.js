@@ -8,7 +8,7 @@ const { checkConnection, initializeDatabase } = require("./db");
 /* CREATE APP FIRST */
 const app = express();
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 
 /* MIDDLEWARE */
 app.use(cors());
