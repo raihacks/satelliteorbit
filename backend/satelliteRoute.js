@@ -1,9 +1,17 @@
 const express = require("express");
+const axios = require("axios");
 const satellite = require("satellite.js");
 const { db, getDatabaseErrorResponse } = require("./db");
 
 const router = express.Router();
 const EARTH_RADIUS_KM = 6371;
+const TLE_SOURCE_URL = "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle";
+const TLE_CACHE_TTL_MS = 60 * 1000;
+
+let tleCache = {
+  expiresAt: 0,
+  byNorad: new Map()
+};
 
 function deg(rad) {
   return (rad * 180) / Math.PI;
@@ -14,6 +22,14 @@ function parseNorad(value) {
   return Number.isInteger(id) && id > 0 ? id : null;
 }
 
+function isDbUnavailable(error) {
+  const transientCodes = new Set(["ENETUNREACH", "ECONNREFUSED", "ETIMEDOUT", "EHOSTUNREACH"]);
+  return (
+    transientCodes.has(error?.code) ||
+    (typeof error?.message === "string" && error.message.startsWith("Database is not configured."))
+  );
+}
+
 async function getTleByNorad(noradId) {
   const [rows] = await db.query(
     "SELECT tle_line1, tle_line2 FROM tle_data WHERE norad_id = ? LIMIT 1",
@@ -21,6 +37,51 @@ async function getTleByNorad(noradId) {
   );
 
   return rows?.[0] ?? null;
+}
+
+function parseTleCatalog(text) {
+  const lines = text.split("\n");
+  const byNorad = new Map();
+
+  for (let i = 0; i < lines.length; i += 3) {
+    const name = lines[i]?.trim();
+    const line1 = lines[i + 1]?.trim();
+    const line2 = lines[i + 2]?.trim();
+
+    if (!name || !line1 || !line2 || !line1.startsWith("1 ") || !line2.startsWith("2 ")) {
+      continue;
+    }
+
+    const noradId = parseNorad(line1.substring(2, 7));
+
+    if (!noradId) {
+      continue;
+    }
+
+    byNorad.set(noradId, { name, tle_line1: line1, tle_line2: line2 });
+  }
+
+  return byNorad;
+}
+
+async function getCachedTleCatalog() {
+  if (Date.now() < tleCache.expiresAt && tleCache.byNorad.size > 0) {
+    return tleCache.byNorad;
+  }
+
+  const response = await axios.get(TLE_SOURCE_URL, {
+    timeout: 20000,
+    headers: {
+      "User-Agent": "SatelliteOrbit/1.0 (+https://github.com)",
+      Accept: "text/plain"
+    }
+  });
+  tleCache = {
+    expiresAt: Date.now() + TLE_CACHE_TTL_MS,
+    byNorad: parseTleCatalog(response.data)
+  };
+
+  return tleCache.byNorad;
 }
 
 function computeGeoPoint(satrec, time) {
@@ -38,6 +99,41 @@ function computeGeoPoint(satrec, time) {
     longitude: deg(geo.longitude),
     altitude_km: geo.height
   };
+}
+
+function createPointPayload(row, now) {
+  const satrec = satellite.twoline2satrec(row.tle_line1, row.tle_line2);
+  const point = computeGeoPoint(satrec, now);
+
+  if (!point) {
+    return null;
+  }
+
+  return {
+    name: row.name,
+    noradId: row.norad_id,
+    timestamp: now.toISOString(),
+    ...point
+  };
+}
+
+async function getSatellitesFromExternalCatalog() {
+  const byNorad = await getCachedTleCatalog();
+  const now = new Date();
+  const satellites = [];
+
+  for (const [noradId, tle] of byNorad.entries()) {
+    const payload = createPointPayload(
+      { name: tle.name, norad_id: noradId, tle_line1: tle.tle_line1, tle_line2: tle.tle_line2 },
+      now
+    );
+
+    if (payload) {
+      satellites.push(payload);
+    }
+  }
+
+  return satellites;
 }
 
 router.post("/", async (req, res) => {
@@ -72,29 +168,25 @@ router.get("/", async (_req, res) => {
     );
 
     const now = new Date();
-    const satellites = [];
-
-    for (const row of rows) {
-      const satrec = satellite.twoline2satrec(row.tle_line1, row.tle_line2);
-      const point = computeGeoPoint(satrec, now);
-
-      if (!point) {
-        continue;
-      }
-
-      satellites.push({
-        name: row.name,
-        noradId: row.norad_id,
-        timestamp: now.toISOString(),
-        ...point
-      });
-    }
+    const satellites = rows
+      .map((row) => createPointPayload(row, now))
+      .filter(Boolean);
 
     res.json(satellites);
   } catch (error) {
-    console.error("Satellite list lookup failed:", error.message);
-    const { status, body } = getDatabaseErrorResponse(error);
-    res.status(status).json(body);
+    if (!isDbUnavailable(error)) {
+      console.error("Satellite list lookup failed:", error.message);
+      const { status, body } = getDatabaseErrorResponse(error);
+      return res.status(status).json(body);
+    }
+
+    try {
+      const fallbackSatellites = await getSatellitesFromExternalCatalog();
+      return res.json(fallbackSatellites);
+    } catch (fallbackError) {
+      console.error("Satellite list fallback failed:", fallbackError.message);
+      return res.json([]);
+    }
   }
 });
 
@@ -126,9 +218,38 @@ router.get("/:norad", async (req, res) => {
       ...point
     });
   } catch (error) {
-    console.error("Satellite lookup failed:", error.message);
-    const { status, body } = getDatabaseErrorResponse(error);
-    res.status(status).json(body);
+    if (!isDbUnavailable(error)) {
+      console.error("Satellite lookup failed:", error.message);
+      const { status, body } = getDatabaseErrorResponse(error);
+      return res.status(status).json(body);
+    }
+
+    try {
+      const catalog = await getCachedTleCatalog();
+      const tle = catalog.get(noradId);
+
+      if (!tle) {
+        return res.status(404).json({ error: "Satellite not found" });
+      }
+
+      const satrec = satellite.twoline2satrec(tle.tle_line1, tle.tle_line2);
+      const now = new Date();
+      const point = computeGeoPoint(satrec, now);
+
+      if (!point) {
+        return res.status(500).json({ error: "Unable to compute satellite position" });
+      }
+
+      return res.json({
+        name: tle.name,
+        noradId,
+        timestamp: now.toISOString(),
+        ...point
+      });
+    } catch (fallbackError) {
+      console.error("Satellite lookup fallback failed:", fallbackError.message);
+      return res.status(503).json({ error: "Satellite data unavailable" });
+    }
   }
 });
 
@@ -174,9 +295,47 @@ router.get("/:norad/orbit", async (req, res) => {
       points
     });
   } catch (error) {
-    console.error("Orbit lookup failed:", error.message);
-    const { status, body } = getDatabaseErrorResponse(error);
-    res.status(status).json(body);
+    if (!isDbUnavailable(error)) {
+      console.error("Orbit lookup failed:", error.message);
+      const { status, body } = getDatabaseErrorResponse(error);
+      return res.status(status).json(body);
+    }
+
+    try {
+      const catalog = await getCachedTleCatalog();
+      const tle = catalog.get(noradId);
+
+      if (!tle) {
+        return res.status(404).json({ error: "Satellite not found" });
+      }
+
+      const satrec = satellite.twoline2satrec(tle.tle_line1, tle.tle_line2);
+      const start = Date.now();
+      const points = [];
+
+      for (let i = 0; i < samples; i++) {
+        const time = new Date(start + i * stepMinutes * 60 * 1000);
+        const point = computeGeoPoint(satrec, time);
+
+        if (!point) continue;
+
+        points.push({
+          timestamp: time.toISOString(),
+          ...point,
+          altitude_ratio: point.altitude_km / EARTH_RADIUS_KM
+        });
+      }
+
+      return res.json({
+        noradId,
+        samples: points.length,
+        stepMinutes,
+        points
+      });
+    } catch (fallbackError) {
+      console.error("Orbit fallback failed:", fallbackError.message);
+      return res.status(503).json({ error: "Satellite data unavailable" });
+    }
   }
 });
 

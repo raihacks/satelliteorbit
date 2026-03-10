@@ -5,28 +5,35 @@ const path = require("path");
 const satelliteRoute = require("./satelliteRoute");
 const { checkConnection, initializeDatabase } = require("./db");
 
+/* CREATE APP FIRST */
 const app = express();
-const PORT = process.env.PORT || 3000;
 
+const PORT = process.env.PORT || 8080;
+
+/* MIDDLEWARE */
 app.use(cors());
 app.use(express.json());
 
-app.use(express.static(path.join(__dirname, "..", "frontend")));
+/* STATIC FRONTEND */
+//app.use(express.static(path.join(__dirname, "..", "frontend")));
 
+/* ROUTES */
 app.get("/", (req, res) => {
   res.send("Satellite Tracker API running 🚀");
 });
 
 app.get("/api/health", (_req, res) => {
-  res.json({ ok: true, service: "satellite-backend" });
+  res.json({ ok: true });
 });
 
-app.use("/api/satellite", satelliteRoute);
+/* SATELLITE API */
+app.use("/api/satellites", satelliteRoute);
 
-app.get("*", (_req, res) => {
+app.get(/^(?!\/api).*/, (_req, res) => {
   res.sendFile(path.join(__dirname, "..", "frontend", "index.html"));
-});
+});*/
 
+/* START SERVER */
 async function bootstrap() {
   try {
     await checkConnection();
@@ -35,6 +42,7 @@ async function bootstrap() {
     app.listen(PORT, () => {
       console.log(`Backend running on port ${PORT}`);
     });
+
   } catch (error) {
     console.error("Failed to start server:", error.message);
     process.exit(1);
