@@ -23,7 +23,7 @@ app.get("/api/health", (_req, res) => {
 
 app.use("/api/satellite", satelliteRoute);
 
-app.get(/^(?!\/api).*/, (_req, res) => {
+app.get("*", (_req, res) => {
   res.sendFile(path.join(__dirname, "..", "frontend", "index.html"));
 });
 
