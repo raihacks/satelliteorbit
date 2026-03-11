@@ -46,7 +46,7 @@ const earth = new THREE.Mesh(
 earthSystem.add(earth);
 
 /* Satellite management */
-const satellites = []; // store multiple satellites
+const satellites = []; 
 
 function createSatelliteMarker(color = 0xffffff) {
   const marker = new THREE.Mesh(
@@ -110,19 +110,19 @@ async function updateSatellite(sat) {
     earthSystem.add(sat.groundLine);
 
     // Orbit line (inclination)
-    if (!sat.orbitLine) {
-      const orbitRadius = pos.length();
-      const points = [];
-      for (let i = 0; i <= 360; i++) {
-        const angle = THREE.MathUtils.degToRad(i);
-        points.push(new THREE.Vector3(orbitRadius * Math.cos(angle), 0, orbitRadius * Math.sin(angle)));
-      }
-      const geometryOrbit = new THREE.BufferGeometry().setFromPoints(points);
-      const materialOrbit = new THREE.LineBasicMaterial({ color: 0x44aaff });
-      sat.orbitLine = new THREE.LineLoop(geometryOrbit, materialOrbit);
-      sat.orbitLine.rotation.x = THREE.MathUtils.degToRad(Math.abs(data.latitude));
-      earthSystem.add(sat.orbitLine);
-    }
+    // if (!sat.orbitLine) {
+    //   const orbitRadius = pos.length();
+    //   const points = [];
+    //   for (let i = 0; i <= 360; i++) {
+    //     const angle = THREE.MathUtils.degToRad(i);
+    //     points.push(new THREE.Vector3(orbitRadius * Math.cos(angle), 0, orbitRadius * Math.sin(angle)));
+    //   }
+    //   const geometryOrbit = new THREE.BufferGeometry().setFromPoints(points);
+    //   const materialOrbit = new THREE.LineBasicMaterial({ color: 0x44aaff });
+    //   sat.orbitLine = new THREE.LineLoop(geometryOrbit, materialOrbit);
+    //   sat.orbitLine.rotation.x = THREE.MathUtils.degToRad(Math.abs(data.latitude));
+    //   earthSystem.add(sat.orbitLine);
+    // }
 
   } catch (err) {
     console.error(err);
