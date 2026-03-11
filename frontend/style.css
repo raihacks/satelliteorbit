@@ -1,11 +1,11 @@
 :root {
   color-scheme: dark;
-  --panel-bg: rgba(10, 15, 28, 0.84);
-  --panel-border: rgba(116, 166, 255, 0.35);
-  --text: #e8eeff;
-  --muted: #95a8cc;
-  --accent: #2ea0ff;
-  --accent-2: #52beff;
+  --panel-bg: rgba(6, 12, 24, 0.72);
+  --panel-border: rgba(130, 178, 255, 0.28);
+  --text: #f2f6ff;
+  --muted: #9db3dc;
+  --accent: #49b9ff;
+  --accent-2: #6ffff2;
 }
 
 * {
@@ -16,7 +16,7 @@ body {
   margin: 0;
   font-family: Inter, Segoe UI, Roboto, Arial, sans-serif;
   color: var(--text);
-  background: radial-gradient(circle at 30% 20%, #0d1c38 0%, #020512 45%, #000 100%);
+  background: radial-gradient(circle at 55% 28%, #172f63 0%, #091427 42%, #01040a 100%);
   overflow: hidden;
 }
 
@@ -31,49 +31,72 @@ body {
   height: 100vh;
 }
 
-.control-panel {
+.top-bar,
+.control-panel,
+.telemetry-panel {
   position: absolute;
-  top: 20px;
-  left: 20px;
-  width: min(420px, calc(100vw - 40px));
-  padding: 18px;
-  border-radius: 14px;
+  z-index: 5;
   background: var(--panel-bg);
   border: 1px solid var(--panel-border);
-  backdrop-filter: blur(8px);
-  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.4);
-  z-index: 5;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.38);
+  border-radius: 14px;
 }
 
-h1 {
+.top-bar {
+  left: 20px;
+  top: 18px;
+  padding: 12px 16px;
+}
+
+.top-bar h1 {
   margin: 0;
-  font-size: 1.2rem;
+  font-size: 1rem;
 }
 
-.panel-subtitle {
-  margin: 6px 0 16px;
+.top-bar p {
+  margin: 4px 0 0;
   color: var(--muted);
-  line-height: 1.4;
-  font-size: 0.88rem;
+  font-size: 0.8rem;
+}
+
+.control-panel {
+  top: 92px;
+  left: 20px;
+  width: min(390px, calc(100vw - 40px));
+  padding: 16px;
+}
+
+.telemetry-panel {
+  right: 20px;
+  top: 18px;
+  width: 250px;
+  padding: 14px;
+}
+
+.telemetry-panel h2 {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
 }
 
 label {
-  font-size: 0.82rem;
+  display: block;
+  font-size: 0.76rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--muted);
 }
 
 .input-row {
-  margin-top: 7px;
+  margin-top: 8px;
   display: flex;
   gap: 8px;
 }
 
 input {
   flex: 1;
-  border: 1px solid rgba(122, 149, 199, 0.4);
-  background: rgba(3, 8, 20, 0.9);
+  border: 1px solid rgba(129, 165, 233, 0.42);
+  background: rgba(5, 10, 20, 0.9);
   color: var(--text);
   border-radius: 8px;
   padding: 10px 12px;
@@ -83,22 +106,18 @@ input {
 button {
   border: none;
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  color: #012;
+  color: #021222;
   font-weight: 700;
-  padding: 10px 16px;
+  padding: 10px 15px;
   border-radius: 8px;
   cursor: pointer;
 }
 
-button:hover {
-  filter: brightness(1.1);
-}
-
 .status {
   margin-top: 12px;
-  color: #d0dcf6;
+  color: #d3defa;
   min-height: 1.4em;
-  font-size: 0.92rem;
+  font-size: 0.9rem;
 }
 
 .sat-list {
@@ -118,32 +137,28 @@ button:hover {
   cursor: pointer;
 }
 
-.sat-pill:hover {
-  filter: brightness(1.15);
-}
-
 .sat-pill.active {
   border-color: #8df2ff;
   color: #8df2ff;
 }
 
 .telemetry {
-  margin: 14px 0 0;
+  margin: 0;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 8px;
 }
 
 .telemetry div {
-  background: rgba(7, 13, 30, 0.65);
+  background: rgba(6, 13, 27, 0.7);
   border: 1px solid rgba(106, 132, 190, 0.3);
   border-radius: 8px;
-  padding: 9px;
+  padding: 8px;
 }
 
 .telemetry dt {
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -151,4 +166,18 @@ button:hover {
 .telemetry dd {
   margin: 6px 0 0;
   font-size: 1rem;
+}
+
+@media (max-width: 900px) {
+  .telemetry-panel {
+    top: auto;
+    bottom: 18px;
+    left: 20px;
+    right: 20px;
+    width: auto;
+  }
+
+  .telemetry {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
