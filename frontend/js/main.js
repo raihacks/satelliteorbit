@@ -44,40 +44,42 @@ const earth = new THREE.Mesh(
 );
 earthSystem.add(earth);
 
-const stars = new THREE.Mesh(
-  new THREE.SphereGeometry(200, 64, 64),
-  new THREE.MeshBasicMaterial({
-    map: textureLoader.load("https://threejs.org/examples/textures/galaxy_starfield.png"),
-    side: THREE.BackSide
-  })
-);
-scene.add(stars);
-
 function createSatelliteMarker(color = 0x7df4ff) {
+
   const marker = new THREE.Mesh(
     new THREE.SphereGeometry(0.06, 14, 14),
     new THREE.MeshBasicMaterial({ color })
   );
+
   marker.visible = false;
+  const altitudeMaterial = new THREE.LineBasicMaterial({ color: 0xffffff });
+const altitudeGeometry = new THREE.BufferGeometry();
+
+const altitudeLine = new THREE.Line(altitudeGeometry, altitudeMaterial);
+earthSystem.add(altitudeLine);
   earthSystem.add(marker);
 
-  return {
-    marker,
-    targetPosition: new THREE.Vector3(),
-    groundTrack: [],
-    norad: null,
-    latestData: null,
-    groundLine: null,
-    pillEl: null
-  };
+return {
+  marker,
+  targetPosition: new THREE.Vector3(),
+  orbitLine: null,
+  groundLine: null,
+  groundPoints: [],
+  altitudeLine,
+  norad: null,
+  latestData: null,
+  satrec: null,
+  pillEl: null
+};
 }
 
 function latLonToVector3(lat, lon, altitudeKm = 0) {
   const radius = EARTH_RADIUS + (altitudeKm / 6371) * EARTH_RADIUS;
-  const phi = (90 - lat) * Math.PI / 180;
-  const theta = (lon + 180) * Math.PI / 180;
+  const phi = (90 - lat) * (Math.PI / 180);
+  const theta = (lon + 180) * (Math.PI / 180); // Adjusted for standard texture wrapping
+
   return new THREE.Vector3(
-    -(radius * Math.sin(phi) * Math.cos(theta)),
+    -radius * Math.sin(phi) * Math.cos(theta),
     radius * Math.cos(phi),
     radius * Math.sin(phi) * Math.sin(theta)
   );
@@ -131,6 +133,7 @@ function updateTelemetry() {
 }
 
 async function addSatellite(norad) {
+
   const cleaned = `${norad}`.trim();
   if (!cleaned) return;
 
@@ -145,41 +148,214 @@ async function addSatellite(norad) {
   sat.norad = cleaned;
   satellites.push(sat);
 
+  // ✅ CREATE GROUND TRACK LINE HERE
+  const geom = new THREE.BufferGeometry();
+  const mat = new THREE.LineBasicMaterial({ color: 0x66dbff });
+
+  sat.groundLine = new THREE.Line(geom, mat);
+  earthSystem.add(sat.groundLine);
+
+  // fetch TLE once when satellite is added
   try {
+
+    const tle = await fetchTLE(cleaned);
+
+    sat.satrec = satellite.twoline2satrec(
+      tle.tle1,
+      tle.tle2
+    );
+
+    drawPredictedOrbit(sat);
+
+  } catch (err) {
+    console.warn("TLE fetch failed", err);
+  }
+
+  if (!sat.satrec) {
+    setStatus("Could not load TLE for " + cleaned, true);
+    return;
+  }
+
+  try {
+
     await updateSatellite(sat);
     selectSatellite(sat);
     renderSatellitePills();
+
   } catch (error) {
+
     const satIndex = satellites.indexOf(sat);
     if (satIndex >= 0) {
       satellites.splice(satIndex, 1);
     }
+
     earthSystem.remove(sat.marker);
     setStatus(error.message, true);
   }
 }
+function buildPredictedOrbit(sat) {
+  if (!sat.satrec) return null;
+
+  const orbitPoints = [];
+  const groundPoints = [];
+  const now = new Date();
+  const minutesAhead = 100; // Roughly one full orbit
+  const stepSeconds = 30;
+
+  for (let t = 0; t <= minutesAhead * 60; t += stepSeconds) {
+    const time = new Date(now.getTime() + t * 1000);
+    const pv = satellite.propagate(sat.satrec, time);
+    
+    if (!pv.position) continue;
+
+    const gmst = satellite.gstime(time);
+    const geo = satellite.eciToGeodetic(pv.position, gmst);
+    const lat = satellite.degreesLat(geo.latitude);
+    const lon = satellite.degreesLong(geo.longitude);
+    const alt = geo.height;
+
+    // Convert to 3D vectors in the Earth-Fixed frame
+    const oPoint = latLonToVector3(lat, lon, alt);
+    const gPoint = latLonToVector3(lat, lon, 0);
+
+    // To prevent lines jumping across the screen at the International Date Line
+    if (orbitPoints.length > 0) {
+      const prev = orbitPoints[orbitPoints.length - 1];
+      if (oPoint.distanceTo(prev) > EARTH_RADIUS * 1.5) {
+        // We skip this segment to create a "gap" at the wrap-around point
+        continue; 
+      }
+    }
+
+    orbitPoints.push(oPoint);
+    groundPoints.push(gPoint);
+  }
+
+  return { orbitPoints, groundPoints };
+}
+
+function drawPredictedOrbit(sat) {
+  const result = buildPredictedOrbit(sat);
+  if (!result || !result.orbitPoints.length) return;
+
+  // 1. Remove old objects to prevent ghost lines
+  if (sat.orbitLine) earthSystem.remove(sat.orbitLine);
+  if (sat.groundLine) earthSystem.remove(sat.groundLine);
+
+  // 2. Helper to format points for LineSegments (Pairs: 0-1, 1-2, 2-3...)
+  const formatSegments = (points) => {
+    const segmentPairs = [];
+    for (let i = 0; i < points.length - 1; i++) {
+      segmentPairs.push(points[i], points[i + 1]);
+    }
+    return segmentPairs;
+  };
+
+  // 3. Create Orbit Line (The higher orange one)
+  const orbitGeom = new THREE.BufferGeometry().setFromPoints(formatSegments(result.orbitPoints));
+  const orbitMat = new THREE.LineBasicMaterial({ color: 0xffb86a });
+  sat.orbitLine = new THREE.LineSegments(orbitGeom, orbitMat);
+
+  // 4. Create Ground Line (The blue one on the surface)
+  const groundGeom = new THREE.BufferGeometry().setFromPoints(formatSegments(result.groundPoints));
+  const groundMat = new THREE.LineBasicMaterial({ color: 0x66dbff });
+  sat.groundLine = new THREE.LineSegments(groundGeom, groundMat);
+
+  // 5. Add them back to the system
+  earthSystem.add(sat.orbitLine);
+  earthSystem.add(sat.groundLine);
+}
 
 async function updateSatellite(sat) {
-  const data = await fetchSatellitePosition(sat.norad);
-  sat.latestData = data;
 
-  const pos = latLonToVector3(data.latitude, data.longitude, data.altitude_km);
-  sat.targetPosition.copy(pos);
+  if (!sat.satrec) return;
+
+  const now = new Date();
+
+  const posVel = satellite.propagate(sat.satrec, now);
+  if (!posVel.position) return;
+
+  const gmst = satellite.gstime(now);
+
+  const scale = EARTH_RADIUS / 6371;
+
+  const x = posVel.position.x * scale;
+  const y = posVel.position.y * scale;
+  const z = posVel.position.z * scale;
+
+  sat.targetPosition.set(x, y, z);
   sat.marker.visible = true;
 
-  const surfacePoint = latLonToVector3(data.latitude, data.longitude, 0);
-  sat.groundTrack.push(surfacePoint);
-  if (sat.groundTrack.length > 420) sat.groundTrack.shift();
+  // --- Convert to lat/lon
+// Inside updateSatellite(sat)
+const geo = satellite.eciToGeodetic(posVel.position, gmst);
+const lat = satellite.degreesLat(geo.latitude);
+const lon = satellite.degreesLong(geo.longitude);
+const alt = geo.height;
 
-  if (sat.groundLine) earthSystem.remove(sat.groundLine);
-  const geometry = new THREE.BufferGeometry().setFromPoints(sat.groundTrack);
-  const material = new THREE.LineBasicMaterial({ color: 0x66dbff });
-  sat.groundLine = new THREE.Line(geometry, material);
-  earthSystem.add(sat.groundLine);
+// 1. Position the marker using Lat/Lon/Alt (This keeps it in the Earth-Fixed frame)
+const satVector = latLonToVector3(lat, lon, alt);
+sat.targetPosition.copy(satVector); 
 
-  if (selectedSatellite === sat) {
-    updateTelemetry();
+// 3. Update Altitude Line - Now they will align perfectly
+sat.altitudeLine.geometry.setFromPoints([groundPoint, satVector]);
+
+sat.latestData = {
+  latitude: lat,
+  longitude: lon,
+  altitude_km: alt
+};
+
+// --- Ground point
+const groundPoint = latLonToVector3(lat, lon, 0);
+
+// altitude line (ground → satellite)
+sat.altitudeLine.geometry.setFromPoints([
+  groundPoint,
+  sat.targetPosition.clone()
+]);
+
+// --- Ground track trail
+sat.groundPoints.push(groundPoint);
+
+if (sat.groundPoints.length > 300) {
+  sat.groundPoints.shift();
+}
+
+const cleanPoints = sat.groundPoints.filter(p => p !== null);
+
+if (cleanPoints.length > 1) {
+  sat.groundLine.geometry.setFromPoints(cleanPoints);
+}
+}
+
+async function fetchTLE(norad) {
+
+  const url = `https://celestrak.org/NORAD/elements/gp.php?CATNR=${norad}&FORMAT=TLE`;
+
+  const res = await fetch(url);
+
+  if (!res.ok) {
+    throw new Error("Failed to fetch TLE");
   }
+
+  const text = await res.text();
+
+  const lines = text.trim().split("\n");
+
+  if (lines.length < 3) {
+    throw new Error("No TLE found for NORAD " + norad);
+  }
+
+  const tle = {
+    name: lines[0].trim(),
+    tle1: lines[1].trim(),
+    tle2: lines[2].trim()
+  };
+
+  console.log("Loaded TLE:", tle);
+
+  return tle;
 }
 
 function setStatus(msg, isError = false) {
@@ -195,7 +371,7 @@ setInterval(() => {
       }
     });
   });
-}, 3000);
+}, 1000);
 
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
@@ -216,7 +392,7 @@ window.addEventListener("click", (event) => {
 
 function animate() {
   satellites.forEach((sat) => {
-    sat.marker.position.lerp(sat.targetPosition, 0.18);
+    sat.marker.position.lerp(sat.targetPosition, 0.15);
   });
 
   controls.update();
