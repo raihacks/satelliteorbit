@@ -1,7 +1,7 @@
 export function createSatelliteMarker(color = 0x7df4ff) {
 
   const marker = new THREE.Mesh(
-    new THREE.SphereGeometry(0.06, 14, 14),
+    new THREE.SphereGeometry(0.03, 7, 7),
     new THREE.MeshBasicMaterial({ color })
   );
 
