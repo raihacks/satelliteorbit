@@ -13,8 +13,8 @@ export function createSatelliteMarker(color = 0x7df4ff) {
     norad: null,
     latestData: null,
     orbitLine: null,
+    altitudeLine: null,
     groundLine: null,
-    altitudeBridges: null,
-    lastPredictionAt: 0
+    groundTrackPoints: []
   };
 }

@@ -3,8 +3,8 @@ import { fetchTLE } from "../api/fetchTLE.js";
 import { latLonToVector3 } from "../math/latLonToVector3.js";
 
 const PREDICTION_MINUTES_AHEAD = 100;
-const PREDICTION_STEP_SECONDS = 45;
-const PREDICTION_REFRESH_MS = 30_000;
+const PREDICTION_STEP_SECONDS = 0.02;
+const PREDICTION_REFRESH_MS = 360;
 
 export class SatelliteManager {
   constructor(group) {
@@ -47,6 +47,10 @@ export class SatelliteManager {
         return;
       }
 
+      if (!sat.orbitLine) {
+        this.createConstantOrbitLine(sat, now);
+      }
+
       const posVel = satellite.propagate(sat.satrec, now);
 
       if (!posVel.position) {
@@ -59,28 +63,39 @@ export class SatelliteManager {
       const longitude = satellite.degreesLong(geo.longitude);
       const altitudeKm = geo.height;
 
-      sat.targetPosition.copy(latLonToVector3(latitude, longitude, altitudeKm));
+      const satellitePoint = latLonToVector3(latitude, longitude, altitudeKm);
+      const groundPoint = latLonToVector3(latitude, longitude, 0);
+      sat.targetPosition.copy(satellitePoint);
       sat.marker.position.lerp(sat.targetPosition, 0.2);
       sat.marker.visible = true;
+
+      this.updateAltitudeLine(sat, groundPoint, satellitePoint);
+      this.updateGroundLine(sat, groundPoint);
 
       sat.latestData = {
         latitude,
         longitude,
         altitude_km: altitudeKm
       };
-      if (!sat.orbitLine || now.getTime() - sat.lastPredictionAt > PREDICTION_REFRESH_MS) {
-        this.updatePredictionLines(sat, now);
-        sat.lastPredictionAt = now.getTime();
-      }
+      // if (!sat.orbitLine || now.getTime() - sat.lastPredictionAt > PREDICTION_REFRESH_MS) {
+      //   this.updatePredictionLines(sat, now);
+      //   sat.lastPredictionAt = now.getTime();
+      // }
     });
   }
-  updatePredictionLines(sat, now = new Date()) {
-    const orbitPoints = [];
-    const groundPoints = [];
-    const altitudeBridgePoints = [];
+  createConstantOrbitLine(sat, startTime) {
+    const meanMotion = sat.satrec.no;
+    if (!meanMotion || !Number.isFinite(meanMotion)) {
+      return;
+    }
 
-    for (let t = 0; t <= PREDICTION_MINUTES_AHEAD * 60; t += PREDICTION_STEP_SECONDS) {
-      const time = new Date(now.getTime() + t * 1000);
+    const orbitPeriodMinutes = (2 * Math.PI) / meanMotion;
+    const orbitPeriodMs = orbitPeriodMinutes * 60 * 1000;
+    const orbitPoints = [];
+
+    for (let i = 0; i <= ORBIT_SAMPLE_POINTS; i += 1) {
+      const progress = i / ORBIT_SAMPLE_POINTS;
+      const time = new Date(startTime.getTime() + progress * orbitPeriodMs);
       const posVel = satellite.propagate(sat.satrec, time);
 
       if (!posVel.position) {
@@ -89,35 +104,57 @@ export class SatelliteManager {
 
       const gmst = satellite.gstime(time);
       const geo = satellite.eciToGeodetic(posVel.position, gmst);
-      const lat = satellite.degreesLat(geo.latitude);
-      const lon = satellite.degreesLong(geo.longitude);
-      const altKm = geo.height;
-
-      const orbitPoint = latLonToVector3(lat, lon, altKm);
-      const groundPoint = latLonToVector3(lat, lon, 0);
-
-      if (orbitPoints.length > 0) {
-        const prevOrbitPoint = orbitPoints[orbitPoints.length - 1];
-        if (orbitPoint.distanceTo(prevOrbitPoint) > 2.4) {
-          continue;
-        }
-      }
-
-      orbitPoints.push(orbitPoint);
-      groundPoints.push(groundPoint);
-      altitudeBridgePoints.push(groundPoint, orbitPoint);
+      orbitPoints.push(
+        latLonToVector3(
+          satellite.degreesLat(geo.latitude),
+          satellite.degreesLong(geo.longitude),
+          geo.height
+        )
+      );
     }
 
     if (orbitPoints.length < 2) {
       return;
     }
 
-    this.replaceLine(sat, "orbitLine", orbitPoints, 0xffb86a);
-    this.replaceLine(sat, "groundLine", groundPoints, 0x66dbff);
-    this.replaceLine(sat, "altitudeBridges", altitudeBridgePoints, 0x98ffa7, true);
+    this.replaceLine(sat, "orbitLine", orbitPoints, 0xffb86a, false, true);
   }
 
-  replaceLine(sat, key, points, color, segments = false) {
+  updateAltitudeLine(sat, groundPoint, satellitePoint) {
+    const points = [groundPoint, satellitePoint];
+
+    if (!sat.altitudeLine) {
+      this.replaceLine(sat, "altitudeLine", points, 0x98ffa7, false, false);
+      return;
+    }
+
+    sat.altitudeLine.geometry.setFromPoints(points);
+  }
+
+  updateGroundLine(sat, groundPoint) {
+    const previousPoint = sat.groundTrackPoints[sat.groundTrackPoints.length - 1];
+
+    if (!previousPoint || previousPoint.distanceTo(groundPoint) >= MIN_GROUND_STEP) {
+      sat.groundTrackPoints.push(groundPoint.clone());
+    }
+
+    if (sat.groundTrackPoints.length > MAX_GROUND_POINTS) {
+      sat.groundTrackPoints.shift();
+    }
+
+    if (sat.groundTrackPoints.length < 2) {
+      return;
+    }
+
+    if (!sat.groundLine) {
+      this.replaceLine(sat, "groundLine", sat.groundTrackPoints, 0x66dbff, false, false);
+      return;
+    }
+
+    sat.groundLine.geometry.setFromPoints(sat.groundTrackPoints);
+  }
+
+  replaceLine(sat, key, points, color, segments = false, closed = false) {
     if (sat[key]) {
       this.group.remove(sat[key]);
       sat[key].geometry.dispose();
@@ -126,9 +163,15 @@ export class SatelliteManager {
 
     const geometry = new THREE.BufferGeometry().setFromPoints(points);
     const material = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.9 });
-    sat[key] = segments
-      ? new THREE.LineSegments(geometry, material)
-      : new THREE.Line(geometry, material);
+
+    if (segments) {
+      sat[key] = new THREE.LineSegments(geometry, material);
+    } else {
+      sat[key] = new THREE.Line(geometry, material);
+      if (closed) {
+        sat[key].geometry.setFromPoints([...points, points[0]]);
+      }
+    }
 
     this.group.add(sat[key]);
   }
