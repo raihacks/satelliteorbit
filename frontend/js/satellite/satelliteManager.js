@@ -5,6 +5,9 @@ import { latLonToVector3 } from "../math/latLonToVector3.js";
 const PREDICTION_MINUTES_AHEAD = 100;
 const PREDICTION_STEP_SECONDS = 0.02;
 const PREDICTION_REFRESH_MS = 360;
+const ORBIT_SAMPLE_POINTS = 240;
+const MIN_GROUND_STEP = 0.02;
+const MAX_GROUND_POINTS = 600;
 
 export class SatelliteManager {
   constructor(group) {
@@ -77,10 +80,10 @@ export class SatelliteManager {
         longitude,
         altitude_km: altitudeKm
       };
-      // if (!sat.orbitLine || now.getTime() - sat.lastPredictionAt > PREDICTION_REFRESH_MS) {
-      //   this.updatePredictionLines(sat, now);
-      //   sat.lastPredictionAt = now.getTime();
-      // }
+      if (!sat.orbitLine || now.getTime() - sat.lastPredictionAt > PREDICTION_REFRESH_MS) {
+        this.updatePredictionLines(sat, now);
+        sat.lastPredictionAt = now.getTime();
+      }
     });
   }
   createConstantOrbitLine(sat, startTime) {
