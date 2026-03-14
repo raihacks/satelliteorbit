@@ -60,6 +60,7 @@ function renderSatPills() {
     pill.textContent = sat.name ? `${sat.norad} · ${sat.name}` : `${sat.norad}`;
     pill.addEventListener("click", () => {
       selectedSatellite = sat;
+      satellites.setSelectedNorad(sat.norad);
       setStatus(`Tracking NORAD ${sat.norad}.`);
       renderSatPills();
       setTelemetry(selectedSatellite);
@@ -83,6 +84,7 @@ async function handleTrackSatellite() {
   try {
     const sat = await satellites.addSatellite(norad);
     selectedSatellite = sat;
+    satellites.setSelectedNorad(sat.norad);
     setStatus(`Tracking NORAD ${norad}.`);
     renderSatPills();
   } catch (error) {

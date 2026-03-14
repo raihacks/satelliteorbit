@@ -13,6 +13,23 @@ export class SatelliteManager {
   constructor(group) {
     this.group = group;
     this.satellites = [];
+    this.selectedNorad = null;
+  }
+
+  setSelectedNorad(norad) {
+    this.selectedNorad = norad;
+
+    this.satellites.forEach((sat) => {
+      this.applyLineVisibility(sat);
+    });
+  }
+
+  applyLineVisibility(sat) {
+    const isSelected = sat.norad === this.selectedNorad;
+
+    if (sat.orbitLine) sat.orbitLine.visible = isSelected;
+    if (sat.altitudeLine) sat.altitudeLine.visible = isSelected;
+    if (sat.groundLine) sat.groundLine.visible = isSelected;
   }
 
   hasSatellite(norad) {
@@ -74,6 +91,7 @@ export class SatelliteManager {
 
       this.updateAltitudeLine(sat, groundPoint, satellitePoint);
       this.updateGroundLine(sat, groundPoint);
+      this.applyLineVisibility(sat);
 
       sat.latestData = {
         latitude,
@@ -176,6 +194,7 @@ export class SatelliteManager {
       }
     }
 
+    this.applyLineVisibility(sat);
     this.group.add(sat[key]);
   }
 }
