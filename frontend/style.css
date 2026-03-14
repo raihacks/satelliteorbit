@@ -111,6 +111,13 @@ button {
   padding: 10px 15px;
   border-radius: 8px;
   cursor: pointer;
+  white-space: nowrap;
+}
+
+#load-all-btn {
+  background: rgba(16, 37, 78, 0.95);
+  border: 1px solid rgba(129, 165, 233, 0.42);
+  color: #dbe8ff;
 }
 
 .status {
@@ -125,6 +132,8 @@ button {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  max-height: 190px;
+  overflow-y: auto;
 }
 
 .sat-pill {
@@ -180,4 +189,25 @@ button {
   .telemetry {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+/* .secondary-btn {
+  margin-top: 10px;
+  width: 100%;
+  background: rgba(16, 36, 72, 0.7);
+  border: 1px solid rgba(135, 173, 255, 0.55);
+  color: #dbe8ff;
+  font-weight: 600;
+}
+
+.secondary-btn:disabled,
+button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+} */
+
+.sat-list-overflow {
+  width: 100%;
+  color: var(--muted);
+  font-size: 0.78rem;
 }

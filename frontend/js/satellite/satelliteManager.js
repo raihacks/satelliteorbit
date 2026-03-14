@@ -2,9 +2,6 @@ import { createSatelliteMarker } from "./satelliteMarker.js";
 import { fetchTLE } from "../api/fetchTLE.js";
 import { latLonToVector3 } from "../math/latLonToVector3.js";
 
-const PREDICTION_MINUTES_AHEAD = 100;
-const PREDICTION_STEP_SECONDS = 0.02;
-const PREDICTION_REFRESH_MS = 360;
 const ORBIT_SAMPLE_POINTS = 240;
 const MIN_GROUND_STEP = 0.02;
 const MAX_GROUND_POINTS = 600;
@@ -36,27 +33,44 @@ export class SatelliteManager {
     return this.satellites.some((sat) => sat.norad === norad);
   }
 
-  async addSatellite(norad) {
-    if (this.hasSatellite(norad)) {
-      return this.satellites.find((sat) => sat.norad === norad);
+  addSatelliteFromTle({ norad, name, tle1, tle2 }) {
+    const noradText = String(norad);
+
+    if (this.hasSatellite(noradText)) {
+      return this.satellites.find((sat) => sat.norad === noradText);
     }
 
-    const sat = createSatelliteMarker();
-    sat.norad = norad;
+const sat = createSatelliteMarker();
+    sat.norad = noradText;
+    sat.name = name;
+    sat.satrec = satellite.twoline2satrec(tle1, tle2);
 
     this.group.add(sat.marker);
+    this.satellites.push(sat);
 
-    try {
-      const tle = await fetchTLE(norad);
-      sat.name = tle.name;
-      sat.satrec = satellite.twoline2satrec(tle.tle1, tle.tle2);
-      this.satellites.push(sat);
+    return sat;
+  }
 
-      return sat;
-    } catch (error) {
-      this.group.remove(sat.marker);
-      throw error;
+  async addSatellite(norad) {
+    const noradText = String(norad);
+
+    if (this.hasSatellite(noradText)) {
+      return this.satellites.find((sat) => sat.norad === noradText);
     }
+
+    const tle = await fetchTLE(noradText);
+    return this.addSatelliteFromTle({ norad: noradText, ...tle });
+  }
+
+  addSatellitesFromCatalog(catalog) {
+    const added = [];
+
+    catalog.forEach((entry) => {
+      const sat = this.addSatelliteFromTle(entry);
+      added.push(sat);
+    });
+
+    return added;
   }
 
   update() {
@@ -65,10 +79,6 @@ export class SatelliteManager {
     this.satellites.forEach((sat) => {
       if (!sat.satrec) {
         return;
-      }
-
-      if (!sat.orbitLine) {
-        this.createConstantOrbitLine(sat, now);
       }
 
       const posVel = satellite.propagate(sat.satrec, now);
@@ -89,8 +99,16 @@ export class SatelliteManager {
       sat.marker.position.lerp(sat.targetPosition, 0.2);
       sat.marker.visible = true;
 
-      this.updateAltitudeLine(sat, groundPoint, satellitePoint);
-      this.updateGroundLine(sat, groundPoint);
+      const isSelected = sat.norad === this.selectedNorad;
+
+      if (isSelected) {
+        if (!sat.orbitLine) {
+          this.createConstantOrbitLine(sat, now);
+        }
+
+        this.updateAltitudeLine(sat, groundPoint, satellitePoint);
+        this.updateGroundLine(sat, groundPoint);
+      }
       this.applyLineVisibility(sat);
 
       sat.latestData = {
@@ -98,10 +116,6 @@ export class SatelliteManager {
         longitude,
         altitude_km: altitudeKm
       };
-      if (!sat.orbitLine || now.getTime() - sat.lastPredictionAt > PREDICTION_REFRESH_MS) {
-        this.updatePredictionLines(sat, now);
-        sat.lastPredictionAt = now.getTime();
-      }
     });
   }
   createConstantOrbitLine(sat, startTime) {

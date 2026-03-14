@@ -3,10 +3,12 @@ import { createRenderer } from "./core/renderer.js";
 import { createControls } from "./core/controls.js";
 import { createEarth } from "./earth/earth.js";
 import { SatelliteManager } from "./satellite/satelliteManager.js";
+import { fetchTLECatalog } from "./api/fetchTLECatalog.js";
 
 const viewer = document.getElementById("viewer");
 const noradInput = document.getElementById("norad");
 const trackButton = document.getElementById("track-btn");
+const loadAllButton = document.getElementById("load-all-btn");
 const statusEl = document.getElementById("status");
 const satListEl = document.getElementById("sat-list");
 
@@ -46,10 +48,14 @@ function setTelemetry(sat) {
   altEl.textContent = `${sat.latestData.altitude_km.toFixed(2)} km`;
 }
 
+const MAX_VISIBLE_PILLS = 200;
+
 function renderSatPills() {
   satListEl.innerHTML = "";
 
-  satellites.satellites.forEach((sat) => {
+  const pillsToRender = satellites.satellites.slice(0, MAX_VISIBLE_PILLS);
+
+  pillsToRender.forEach((sat) => {
     const pill = document.createElement("button");
     pill.type = "button";
     pill.className = "sat-pill";
@@ -68,6 +74,13 @@ function renderSatPills() {
 
     satListEl.appendChild(pill);
   });
+
+  if (satellites.satellites.length > MAX_VISIBLE_PILLS) {
+    const overflow = document.createElement("div");
+    overflow.className = "sat-list-overflow";
+    overflow.textContent = `Showing ${MAX_VISIBLE_PILLS} of ${satellites.satellites.length} satellites`;
+    satListEl.appendChild(overflow);
+  }
 }
 
 async function handleTrackSatellite() {
@@ -94,7 +107,33 @@ async function handleTrackSatellite() {
   }
 }
 
+async function handleLoadAllSatellites() {
+  loadAllButton.disabled = true;
+  trackButton.disabled = true;
+  setStatus("Loading active satellites catalog... this may take a few seconds.");
+
+  try {
+    const catalog = await fetchTLECatalog();
+    satellites.addSatellitesFromCatalog(catalog);
+
+    if (!selectedSatellite && satellites.satellites.length > 0) {
+      selectedSatellite = satellites.satellites[0];
+      satellites.setSelectedNorad(selectedSatellite.norad);
+    }
+
+    renderSatPills();
+    setTelemetry(selectedSatellite);
+    setStatus(`Loaded ${catalog.length} active satellites.`);
+  } catch (error) {
+    setStatus(error.message || "Unable to load active satellite catalog.");
+  } finally {
+    loadAllButton.disabled = false;
+    trackButton.disabled = false;
+  }
+}
+
 trackButton.addEventListener("click", handleTrackSatellite);
+loadAllButton.addEventListener("click", handleLoadAllSatellites);
 noradInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
     handleTrackSatellite();
