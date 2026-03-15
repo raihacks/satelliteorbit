@@ -51,6 +51,7 @@ export class SatelliteManager {
   const sat = createSatelliteMarker();
     sat.norad = noradText;
     sat.name = name;
+    sat.marker.userData.norad = noradText;
     sat.satrec = satellite.twoline2satrec(tle1, tle2);
 
     this.applySelectionStyle(sat);
