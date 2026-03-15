@@ -41,6 +41,8 @@ body {
   backdrop-filter: blur(12px);
   box-shadow: 0 20px 45px rgba(0, 0, 0, 0.38);
   border-radius: 14px;
+  width: 160px;
+  padding: 12px;
 }
 
 .top-bar {
@@ -61,21 +63,19 @@ body {
 }
 
 .control-panel {
-  top: 92px;
+  bottom: 20px;
   left: 20px;
-  width: min(390px, calc(100vw - 40px));
-  padding: 16px;
+  width: 220px;
+  padding: 10px; 
 }
 
 .telemetry-panel {
   right: 20px;
   top: 18px;
-  width: 250px;
-  padding: 14px;
 }
 
 .telemetry-panel h2 {
-  margin: 0 0 10px;
+  margin: 0 0 8px;
   font-size: 0.95rem;
 }
 
@@ -88,9 +88,10 @@ label {
 }
 
 .input-row {
-  margin-top: 8px;
+  margin-top: 6px;
   display: flex;
-  gap: 8px;
+  flex-direction: column;
+  gap: 6px;
 }
 
 input {
@@ -101,6 +102,7 @@ input {
   border-radius: 8px;
   padding: 10px 12px;
   font-size: 1rem;
+  width: 100%;
 }
 
 button {
@@ -109,9 +111,10 @@ button {
   color: #021222;
   font-weight: 700;
   padding: 10px 15px;
-  border-radius: 8px;
+  border-radius: 30px;
   cursor: pointer;
   white-space: nowrap;
+  width: 100%;
 }
 
 #load-all-btn {
@@ -161,7 +164,7 @@ button {
 .telemetry div {
   background: rgba(6, 13, 27, 0.7);
   border: 1px solid rgba(106, 132, 190, 0.3);
-  border-radius: 8px;
+  border-radius: 6px;
   padding: 8px;
 }
 
@@ -191,7 +194,7 @@ button {
   }
 }
 
-/* .secondary-btn {
+.secondary-btn {
   margin-top: 10px;
   width: 100%;
   background: rgba(16, 36, 72, 0.7);
@@ -204,7 +207,7 @@ button {
 button:disabled {
   opacity: 0.7;
   cursor: not-allowed;
-} */
+}
 
 .sat-list-overflow {
   width: 100%;

@@ -5,8 +5,9 @@ export function createControls(camera, rendererOrDomElement) {
   controls.enableDamping = true;
   controls.dampingFactor = 0.05;
 
-  controls.minDistance = 10;
-  controls.maxDistance = 60;
+  controls.minDistance = 0.1;
+  controls.maxDistance = 160;
+  controls.zoomSpeed = 1.6;
 
   return controls;
 }
