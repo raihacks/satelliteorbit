@@ -6,6 +6,7 @@
   --muted: #9db3dc;
   --accent: #49b9ff;
   --accent-2: #6ffff2;
+  --tracked-color: #60a5fa;
 }
 
 * {
@@ -41,13 +42,13 @@ body {
   backdrop-filter: blur(12px);
   box-shadow: 0 20px 45px rgba(0, 0, 0, 0.38);
   border-radius: 14px;
-  width: 160px;
   padding: 12px;
 }
 
 .top-bar {
   left: 20px;
   top: 18px;
+  width: 160px;
   padding: 12px 16px;
 }
 
@@ -66,12 +67,13 @@ body {
   bottom: 20px;
   left: 20px;
   width: 220px;
-  padding: 10px; 
+  padding: 10px;
 }
 
 .telemetry-panel {
   right: 20px;
   top: 18px;
+  width: 160px;
 }
 
 .telemetry-panel h2 {
@@ -130,7 +132,7 @@ button {
   font-size: 0.9rem;
 }
 
-catalog-select {
+.catalog-select {
   width: 100%;
   margin-top: 6px;
   border: 1px solid rgba(129, 165, 233, 0.42);
@@ -174,6 +176,8 @@ catalog-select {
   display: grid;
   grid-template-columns: 1fr;
   gap: 8px;
+  border-left: 3px solid var(--tracked-color);
+  transition: border-color 0.4s ease;
 }
 
 .telemetry div {
@@ -193,20 +197,6 @@ catalog-select {
 .telemetry dd {
   margin: 6px 0 0;
   font-size: 1rem;
-}
-
-@media (max-width: 900px) {
-  .telemetry-panel {
-    top: auto;
-    bottom: 18px;
-    left: 20px;
-    right: 20px;
-    width: auto;
-  }
-
-  .telemetry {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 
 .secondary-btn {
@@ -244,4 +234,116 @@ button:disabled {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ── Catalog group buttons — colored when active ── */
+button[data-group="starlink"].active  { border-color: #60a5fa; color: #60a5fa; }
+button[data-group="oneweb"].active    { border-color: #34d399; color: #34d399; }
+button[data-group="iridium"].active   { border-color: #fb923c; color: #fb923c; }
+button[data-group="planet"].active    { border-color: #f472b6; color: #f472b6; }
+button[data-group="geo"].active       { border-color: #a78bfa; color: #a78bfa; }
+button[data-group="intelsat"].active  { border-color: #f87171; color: #f87171; }
+button[data-group="stations"].active  { border-color: #fbbf24; color: #fbbf24; }
+button[data-group="active"].active    { border-color: #2dd4bf; color: #2dd4bf; }
+
+/* ═══════════════════════════════════════
+   MOBILE — max-width: 600px
+═══════════════════════════════════════ */
+@media (max-width: 600px) {
+
+  /* Globe fills the top 55% of the screen */
+  .viewer {
+    height: 55vh;
+  }
+
+  /* Control panel: full width strip at bottom */
+  .control-panel {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    border-radius: 16px 16px 0 0;
+    padding: 12px 16px;
+    max-height: 45vh;
+    overflow-y: auto;
+  }
+
+  /* Telemetry panel: top strip below status bar */
+  .telemetry-panel {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    border-radius: 0 0 16px 16px;
+    padding: 10px 16px;
+  }
+
+  .telemetry-panel h2 {
+    font-size: 0.85rem;
+    margin-bottom: 6px;
+  }
+
+  /* Telemetry grid: 2 columns on mobile */
+  .telemetry {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border-left: none;
+    border-top: 3px solid var(--tracked-color);
+  }
+
+  .telemetry div {
+    padding: 6px 8px;
+  }
+
+  .telemetry dt {
+    font-size: 0.65rem;
+  }
+
+  .telemetry dd {
+    font-size: 0.85rem;
+    margin-top: 3px;
+  }
+
+  /* Input and buttons more compact */
+  input {
+    padding: 8px 10px;
+    font-size: 0.9rem;
+  }
+
+  button {
+    padding: 8px 12px;
+    font-size: 0.85rem;
+  }
+
+  .sat-list {
+    max-height: 100px;
+  }
+
+  .status {
+    font-size: 0.8rem;
+    margin-top: 8px;
+  }
+
+  /* Hide top-bar on mobile to save space */
+  .top-bar {
+    display: none;
+  }
+}
+
+/* ═══════════════════════════════════════
+   TABLET — 601px to 900px
+═══════════════════════════════════════ */
+@media (min-width: 601px) and (max-width: 900px) {
+  .telemetry-panel {
+    top: auto;
+    bottom: 18px;
+    left: 260px;
+    right: 20px;
+    width: auto;
+  }
+
+  .telemetry {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
