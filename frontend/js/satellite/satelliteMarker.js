@@ -9,42 +9,65 @@ const TYPE_COLORS = {
   active:    { default: 0x2dd4bf, hover: 0x5eead4, selected: 0xffffff },
   unknown:   { default: 0x94a3b8, hover: 0xcbd5e1, selected: 0xffffff },
 };
- 
+
 export function getSatelliteColors(nameOrGroup = '') {
   const n = nameOrGroup.toLowerCase();
-  if (n === 'starlink'  || n.startsWith('starlink'))   return TYPE_COLORS.starlink;
-  if (n === 'oneweb'    || n.startsWith('oneweb'))      return TYPE_COLORS.oneweb;
-  if (n === 'iridium'   || n.startsWith('iridium'))     return TYPE_COLORS.iridium;
-  if (n === 'planet'    || n.startsWith('flock') || n.startsWith('skysat')) return TYPE_COLORS.planet;
-  if (n === 'intelsat'  || n.startsWith('intelsat'))    return TYPE_COLORS.intelsat;
-  if (n === 'stations'  || n.includes('station') || n.includes('iss') || n.includes('tiangong')) return TYPE_COLORS.stations;
-  if (n === 'geo')                                      return TYPE_COLORS.geo;
-  if (n === 'active')                                   return TYPE_COLORS.active;
+
+  if (n === 'starlink' || n.startsWith('starlink')) return TYPE_COLORS.starlink;
+  if (n === 'oneweb' || n.startsWith('oneweb')) return TYPE_COLORS.oneweb;
+  if (n === 'iridium' || n.startsWith('iridium')) return TYPE_COLORS.iridium;
+
+  if (
+    n === 'planet' ||
+    n.startsWith('flock') ||
+    n.startsWith('skysat')
+  ) return TYPE_COLORS.planet;
+
+  if (n === 'intelsat' || n.startsWith('intelsat')) return TYPE_COLORS.intelsat;
+
+  if (
+    n === 'stations' ||
+    n.includes('station') ||
+    n.includes('iss') ||
+    n.includes('tiangong')
+  ) return TYPE_COLORS.stations;
+
+  if (n === 'geo') return TYPE_COLORS.geo;
+  if (n === 'active') return TYPE_COLORS.active;
+
   return TYPE_COLORS.unknown;
 }
- 
+
 export function createSatelliteMarker(nameOrGroup = '') {
+
   const colors = getSatelliteColors(nameOrGroup);
- 
-  const geometry = new THREE.SphereGeometry(0.012, 8, 8);
-  const material = new THREE.MeshBasicMaterial({ color: colors.default });
-  const marker = new THREE.Mesh(geometry, material);
+
+  const marker = new THREE.Mesh(
+    new THREE.SphereGeometry(0.03, 7, 7),
+    new THREE.MeshBasicMaterial({ color: colors.default })
+  );
+
   marker.visible = false;
- 
+
   return {
     marker,
-    defaultColor:  colors.default,
-    hoverColor:    colors.hover,
-    selectedColor: colors.selected,
     targetPosition: new THREE.Vector3(),
+
+    // satellite info
+    norad: null,
+    name: null,
+    satrec: null,
+    latestData: null,
+
+    // orbit visuals
     orbitLine: null,
     altitudeLine: null,
     groundLine: null,
     groundTrackPoints: [],
-    latestData: null,
-    norad: null,
-    name: null,
-    satrec: null,
+
+    // colors
+    defaultColor: colors.default,
+    hoverColor: colors.hover,
+    selectedColor: colors.selected
   };
-}
- 
+    }
