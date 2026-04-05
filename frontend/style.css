@@ -176,12 +176,11 @@ button {
   display: grid;
   grid-template-columns: 1fr;
   gap: 8px;
-  border-left: 3px solid var(--tracked-color);
   transition: border-color 0.4s ease;
 }
 
 .telemetry div {
-  /* background: rgba(6, 13, 27, 0.7); */
+  background: rgba(6, 13, 27, 0.7);
   border: 1px solid rgba(106, 132, 190, 0.3); 
   border-radius: 6px;
   padding: 8px;
