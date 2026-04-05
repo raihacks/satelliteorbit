@@ -73,10 +73,10 @@ function buildPoolConfig() {
   }
 
   return {
-    host: DB_HOST || "centerbeam.proxy.rlwy.net",
-    port: Number(DB_PORT || MYSQLPORT || 44905),
+    host: DB_HOST || "mysql.railway.internal",
+    port: Number(DB_PORT || MYSQLPORT || 3306),
     user: DB_USER || MYSQLUSER || "root",
-    password: DB_PASSWORD || MYSQLPASSWORD || "zBkJtGXReVesgChFbwyaTmwcASEoSoHm",
+    password: DB_PASSWORD || MYSQLPASSWORD || "XLKjZhsiSUdNSMQGwlRsaqiCQZrhGjsf",
     database: DB_NAME || MYSQLDATABASE || "railway",
     ssl: getSslConfig(),
     waitForConnections: true,
