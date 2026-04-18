@@ -60,7 +60,7 @@ async function fetchGroupFromCelestrak(group) {
   const cached = groupCache.get(group);
   if (cached && Date.now() < cached.expiresAt && cached.byNorad.size > 0) {
     return cached.byNorad;
-  }
+  } 
 
   // Try multiple TLE sources in order
   const sources = [
