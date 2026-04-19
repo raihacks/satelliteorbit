@@ -1,23 +1,22 @@
 export async function fetchTLE(norad) {
-
-  const url = `https://celestrak.org/NORAD/elements/gp.php?CATNR=${norad}&FORMAT=TLE`;
+  // Pointing to your Express backend instead of Celestrak
+  const url = `/api/satellite/${norad}`;
 
   const res = await fetch(url);
 
   if (!res.ok) {
-    throw new Error("Failed to fetch TLE");
+    throw new Error(`Failed to fetch TLE for NORAD ${norad} from cache/database`);
   }
 
-  const text = await res.text();
-  const lines = text.trim().split("\n");
+  const data = await res.json();
 
-  if (lines.length < 3) {
-    throw new Error("No TLE found for NORAD " + norad);
-  }
-
+  /**
+   * NOTE: Your backend (satelliteRoute.js) returns 'tle_line1' and 'tle_line2'.
+   * We map them back to 'tle1' and 'tle2' to match your SatelliteManager's expectations.
+   */
   return {
-    name: lines[0].trim(),
-    tle1: lines[1].trim(),
-    tle2: lines[2].trim()
+    name: data.name || `NORAD ${norad}`,
+    tle1: data.tle_line1,
+    tle2: data.tle_line2
   };
 }

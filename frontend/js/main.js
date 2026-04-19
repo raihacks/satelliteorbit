@@ -146,9 +146,9 @@ async function handleTrackSatellite() {
   setStatus(`Loading NORAD ${norad}...`);
   try {
     // CHANGE: Fetch from your API to use the 'tle:norad' KV cache
-    const res = await fetch(`/api/satellite/catalog/active`); // Or a specific NORAD endpoint if you prefer
-    const catalog = await res.json();
-    const satData = catalog.find(s => s.norad === norad);
+    const res = await fetch(`/api/satellite/${norad}`);
+const satData = await res.json();
+// Then map satData.tle_line1 to tle1, etc.
     
     if (!satData) throw new Error("Satellite not found in active catalog.");
 
