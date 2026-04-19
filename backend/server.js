@@ -29,18 +29,21 @@ app.use((req, res) => {
   }
 });
 
+// REPLACE WITH this:
 async function bootstrap() {
   try {
     await checkConnection();
     await initializeDatabase();
-
-    app.listen(PORT, () => {
-      console.log(`Backend running on port ${PORT}`);
-    });
   } catch (error) {
-    console.error("Failed to start server:", error.message);
-    process.exit(1);
+    console.error("Failed to initialize:", error.message);
   }
 }
 
 bootstrap();
+
+// For local dev
+if (require.main === module) {
+  app.listen(PORT, () => console.log(`Backend running on port ${PORT}`));
+}
+
+module.exports = app;
