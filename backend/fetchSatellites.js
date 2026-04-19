@@ -36,7 +36,6 @@ async function loadSatellites() {
       tleData.push([norad_id, line1, line2]);
     }
 
-    // Insert satellites in bulk
     await db.query(
       `
       INSERT INTO satellites (name, norad_id, inclination)
@@ -48,7 +47,6 @@ async function loadSatellites() {
       [satellites]
     );
 
-    // Insert TLE data in bulk
     await db.query(
       `
       INSERT INTO tle_data (norad_id, tle_line1, tle_line2)

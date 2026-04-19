@@ -1,8 +1,7 @@
-// satelliteManager.js — frontend/js/satellite/satelliteManager.js
-
 import { createSatelliteMarker } from "./satelliteMarker.js";
 import { fetchTLE } from "../api/fetchTLE.js";
 import { latLonToVector3 } from "../math/latLonToVector3.js";
+import * as satellite from "satellite.js";
 
 const ORBIT_SAMPLE_POINTS = 280;
 const MIN_GROUND_STEP = 0.02;
@@ -62,7 +61,6 @@ export class SatelliteManager {
   }
 
   _resolveTypeKey(name = '', catalogGroup = '') {
-    // Always derive color from satellite name first for accurate mixed-type coloring
     const n = name.toLowerCase();
     if (n.startsWith('starlink'))                        return 'starlink';
     if (n.startsWith('oneweb'))                          return 'oneweb';
@@ -70,7 +68,6 @@ export class SatelliteManager {
     if (n.startsWith('flock') || n.startsWith('skysat')) return 'planet';
     if (n.startsWith('intelsat'))                        return 'intelsat';
     if (n.includes('station') || n.includes('iss') || n.includes('tiangong')) return 'stations';
-    // Fall back to catalog group for unknown names (but not 'active')
     if (catalogGroup && catalogGroup !== 'active') return catalogGroup;
     return 'active';
   }

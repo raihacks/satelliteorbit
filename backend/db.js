@@ -1,4 +1,3 @@
-//db file
 const path = require("path");
 const dotenv = require("dotenv");
 const mysql = require("mysql2/promise");
