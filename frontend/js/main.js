@@ -145,7 +145,14 @@ async function handleTrackSatellite() {
   trackButton.disabled = true;
   setStatus(`Loading NORAD ${norad}...`);
   try {
-    const sat = await satellites.addSatellite(norad);
+    // CHANGE: Fetch from your API to use the 'tle:norad' KV cache
+    const res = await fetch(`/api/satellite/catalog/active`); // Or a specific NORAD endpoint if you prefer
+    const catalog = await res.json();
+    const satData = catalog.find(s => s.norad === norad);
+    
+    if (!satData) throw new Error("Satellite not found in active catalog.");
+
+    const sat = satellites.addSatelliteFromTle(satData);
     selectSatellite(sat, `Tracking NORAD ${norad}.`);
     satellites.update();
     focusCameraOnSatellite(sat);
@@ -159,27 +166,38 @@ async function handleTrackSatellite() {
 async function handleLoadAllSatellites() {
   const catalogGroup = catalogGroupEl?.value || "active";
  
-  // Store current group in the manager so addSatelliteFromTle can use it
+  // Store current group in the manager for color/type resolution
   satellites.currentCatalogGroup = catalogGroup;
  
   loadAllButton.disabled = true;
   trackButton.disabled   = true;
-  setStatus(`Loading ${catalogGroup} satellites catalog... this may take a few seconds.`);
+  setStatus(`Loading ${catalogGroup} satellites... checking cache.`);
  
   try {
-    const catalog = await fetchTLECatalog(catalogGroup);
+    /** * CHANGE: Instead of using fetchTLECatalog(catalogGroup) which hits Celestrak,
+     * we fetch directly from YOUR backend API. This triggers the Upstash KV logic.
+     */
+    const response = await fetch(`/api/satellite/catalog/${encodeURIComponent(catalogGroup)}`);
+    
+    if (!response.ok) {
+      throw new Error(`Server responded with ${response.status}: Failed to load catalog.`);
+    }
+
+    const catalog = await response.json();
  
-    // ← KEY CHANGE: pass catalogGroup so every satellite gets the right color
+    // Add the satellites to the 3D scene
     satellites.addSatellitesFromCatalog(catalog, catalogGroup);
  
+    // Auto-select the first satellite if none are selected
     if (!selectedSatellite && satellites.satellites.length > 0) {
       selectSatellite(satellites.satellites[0]);
     }
  
     renderSatPills();
     setTelemetry(selectedSatellite);
-    setStatus(`Loaded ${catalog.length} satellites from ${catalogGroup}.`);
+    setStatus(`Loaded ${catalog.length} satellites from ${catalogGroup} (via Cache/API).`);
   } catch (error) {
+    console.error("Catalog Load Error:", error);
     setStatus(error.message || `Unable to load ${catalogGroup} satellite catalog.`);
   } finally {
     loadAllButton.disabled = false;

@@ -2,14 +2,18 @@ const express = require("express");
 const axios = require("axios");
 const satellite = require("satellite.js");
 const { db, getDatabaseErrorResponse } = require("./db");
+const { Redis } = require("@upstash/redis"); //
 
 const router = express.Router();
-const EARTH_RADIUS_KM = 6371;
-const TLE_BASE_URL = "https://celestrak.org/NORAD/elements/gp.php";
-const TLE_CACHE_TTL_MS = 60 * 1000;
 
-// Per-group TLE cache
-const groupCache = new Map();
+// Initialize Upstash KV client
+const redis = new Redis({
+  url: "https://good-arachnid-99752.upstash.io",
+  token: "gQAAAAAAAYWoAAIncDE4MTFkNDRmOTVhZDI0MGFkOGIzYjhjNTE4MzFjYWM0NHAxOTk3NTI",
+}); //
+
+const EARTH_RADIUS_KM = 6371;
+const TLE_CACHE_TTL_SECONDS = 3600; // Cache for 1 hour
 
 function deg(rad) {
   return (rad * 180) / Math.PI;
@@ -29,11 +33,33 @@ function isDbUnavailable(error) {
 }
 
 async function getTleByNorad(noradId) {
+  // 1. Try KV Cache first
+  const cacheKey = `tle:${noradId}`;
+  try {
+    const cached = await redis.get(cacheKey);
+    if (cached) return cached;
+  } catch (err) {
+    console.warn("KV Get Error:", err.message);
+  }
+
+  // 2. Try MySQL Database
   const [rows] = await db.query(
     "SELECT tle_line1, tle_line2 FROM tle_data WHERE norad_id = ? LIMIT 1",
     [noradId]
   );
-  return rows?.[0] ?? null;
+  
+  const result = rows?.[0] ?? null;
+
+  // 3. Save to KV if found in DB
+  if (result) {
+    try {
+      await redis.set(cacheKey, result, { ex: TLE_CACHE_TTL_SECONDS });
+    } catch (err) {
+      console.warn("KV Set Error:", err.message);
+    }
+  }
+
+  return result;
 }
 
 function parseTleCatalog(text) {
@@ -57,16 +83,22 @@ function parseTleCatalog(text) {
 }
 
 async function fetchGroupFromCelestrak(group) {
-  const cached = groupCache.get(group);
-  if (cached && Date.now() < cached.expiresAt && cached.byNorad.size > 0) {
-    return cached.byNorad;
-  } 
+  const cacheKey = `catalog:${group}`;
 
-  // Try multiple TLE sources in order
+  // 1. Try KV Cache
+  try {
+    const cachedData = await redis.get(cacheKey);
+    if (cachedData) {
+      // Upstash returns objects; convert back to Map for compatibility
+      return new Map(Object.entries(cachedData));
+    }
+  } catch (err) {
+    console.warn("KV Catalog Get Error:", err.message);
+  }
+
   const sources = [
     `https://celestrak.org/NORAD/elements/gp.php?GROUP=${encodeURIComponent(group)}&FORMAT=tle`,
     `https://celestrak.com/NORAD/elements/gp.php?GROUP=${encodeURIComponent(group)}&FORMAT=tle`,
-    `https://tle.ivanstanojevic.me/api/tle/?search=${encodeURIComponent(group)}&format=text`,
   ];
 
   let lastError = null;
@@ -74,23 +106,26 @@ async function fetchGroupFromCelestrak(group) {
     try {
       const response = await axios.get(url, {
         timeout: 20000,
-        headers: {
-          "User-Agent": "SatelliteOrbit/1.0 (+https://github.com)",
-          Accept: "text/plain"
-        }
+        headers: { "User-Agent": "SatelliteTracker/1.0", Accept: "text/plain" }
       });
       const byNorad = parseTleCatalog(response.data);
+      
       if (byNorad.size > 0) {
-        groupCache.set(group, { expiresAt: Date.now() + TLE_CACHE_TTL_MS, byNorad });
+        // 2. Store in KV Cache (convert Map to Object for JSON storage)
+        try {
+          const plainObj = Object.fromEntries(byNorad);
+          await redis.set(cacheKey, plainObj, { ex: TLE_CACHE_TTL_SECONDS });
+        } catch (err) {
+          console.warn("KV Catalog Set Error:", err.message);
+        }
         return byNorad;
       }
     } catch (err) {
       lastError = err;
-      console.warn(`TLE source failed (${url}): ${err.message}`);
     }
   }
 
-  throw lastError || new Error(`All TLE sources failed for group: ${group}`);
+  throw lastError || new Error(`All sources failed for group: ${group}`);
 }
 
 function computeGeoPoint(satrec, time) {
@@ -108,98 +143,32 @@ function computeGeoPoint(satrec, time) {
 }
 
 function createPointPayload(row, now) {
-  const satrec = satellite.twoline2satrec(row.tle_line1, row.tle_line2);
+  const satrec = satellite.twoline2satrec(row.tle_line1 || row.tle1, row.tle_line2 || row.tle2);
   const point = computeGeoPoint(satrec, now);
   if (!point) return null;
 
   return {
     name: row.name,
-    noradId: row.norad_id,
+    noradId: row.norad_id || row.noradId,
     timestamp: now.toISOString(),
     ...point
   };
 }
 
-// ── NEW: catalog group endpoint ──────────────────────────────────────────────
-// GET /api/satellite/catalog/:group
-// Returns raw TLE array: [{ norad, name, tle1, tle2 }, ...]
+// Routes
 router.get("/catalog/:group", async (req, res) => {
   const group = String(req.params.group || "active").trim().toLowerCase();
-
   try {
     const byNorad = await fetchGroupFromCelestrak(group);
-
-    const result = [];
-    for (const [noradId, tle] of byNorad.entries()) {
-      result.push({
-        norad: String(noradId),
-        name: tle.name,
-        tle1: tle.tle_line1,
-        tle2: tle.tle_line2
-      });
-    }
-
-    if (!result.length) {
-      return res.status(404).json({ error: `No satellites found for group: ${group}` });
-    }
-
+    const result = Array.from(byNorad.entries()).map(([noradId, tle]) => ({
+      norad: String(noradId),
+      name: tle.name,
+      tle1: tle.tle_line1,
+      tle2: tle.tle_line2
+    }));
     res.json(result);
   } catch (err) {
-    console.error(`Catalog fetch failed for group ${group}:`, err.message);
-    res.status(502).json({ error: "Failed to fetch satellite catalog from Celestrak" });
-  }
-});
-// ─────────────────────────────────────────────────────────────────────────────
-
-router.post("/", async (req, res) => {
-  const { name, norad_id, orbit_type, inclination, period } = req.body;
-
-  try {
-    const [result] = await db.query(
-      `INSERT INTO satellites (name, norad_id, orbit_type, inclination, period) VALUES (?, ?, ?, ?, ?)`,
-      [name, norad_id, orbit_type, inclination, period]
-    );
-    res.json({ message: "Satellite added", id: result.insertId });
-  } catch (err) {
-    console.error(err);
-    const { status, body } = getDatabaseErrorResponse(err);
-    res.status(status).json(body);
-  }
-});
-
-router.get("/", async (_req, res) => {
-  try {
-    const [rows] = await db.query(
-      `SELECT s.name, s.norad_id, t.tle_line1, t.tle_line2
-       FROM satellites s
-       INNER JOIN tle_data t ON s.norad_id = t.norad_id
-       ORDER BY s.norad_id ASC`
-    );
-    const now = new Date();
-    const satellites = rows.map((row) => createPointPayload(row, now)).filter(Boolean);
-    res.json(satellites);
-  } catch (error) {
-    if (!isDbUnavailable(error)) {
-      console.error("Satellite list lookup failed:", error.message);
-      const { status, body } = getDatabaseErrorResponse(error);
-      return res.status(status).json(body);
-    }
-    try {
-      const byNorad = await fetchGroupFromCelestrak("active");
-      const now = new Date();
-      const fallbackSatellites = [];
-      for (const [noradId, tle] of byNorad.entries()) {
-        const payload = createPointPayload(
-          { name: tle.name, norad_id: noradId, tle_line1: tle.tle_line1, tle_line2: tle.tle_line2 },
-          now
-        );
-        if (payload) fallbackSatellites.push(payload);
-      }
-      return res.json(fallbackSatellites);
-    } catch (fallbackError) {
-      console.error("Satellite list fallback failed:", fallbackError.message);
-      return res.json([]);
-    }
+    res.status(502).json({ error: "Failed to fetch catalog" });
   }
 });
 
@@ -214,82 +183,35 @@ router.get("/:norad", async (req, res) => {
     const satrec = satellite.twoline2satrec(tle.tle_line1, tle.tle_line2);
     const now = new Date();
     const point = computeGeoPoint(satrec, now);
-    if (!point) return res.status(500).json({ error: "Unable to compute satellite position" });
 
     res.json({ noradId, timestamp: now.toISOString(), ...point });
   } catch (error) {
-    if (!isDbUnavailable(error)) {
-      console.error("Satellite lookup failed:", error.message);
-      const { status, body } = getDatabaseErrorResponse(error);
-      return res.status(status).json(body);
-    }
-    try {
-      const catalog = await fetchGroupFromCelestrak("active");
-      const tle = catalog.get(noradId);
-      if (!tle) return res.status(404).json({ error: "Satellite not found" });
-
-      const satrec = satellite.twoline2satrec(tle.tle_line1, tle.tle_line2);
-      const now = new Date();
-      const point = computeGeoPoint(satrec, now);
-      if (!point) return res.status(500).json({ error: "Unable to compute satellite position" });
-
-      return res.json({ name: tle.name, noradId, timestamp: now.toISOString(), ...point });
-    } catch (fallbackError) {
-      console.error("Satellite lookup fallback failed:", fallbackError.message);
-      return res.status(503).json({ error: "Satellite data unavailable" });
-    }
+    res.status(500).json({ error: "Server error" });
   }
 });
 
-router.get("/:norad/orbit", async (req, res) => {
-  const noradId = parseNorad(req.params.norad);
-  const samples = Math.min(Math.max(Number.parseInt(req.query.samples, 10) || 90, 10), 720);
-  const stepMinutes = Math.min(Math.max(Number.parseInt(req.query.stepMinutes, 10) || 1, 1), 30);
-
-  if (!noradId) return res.status(400).json({ error: "Invalid NORAD ID" });
-
+// GET /api/satellite (List all)
+router.get("/", async (_req, res) => {
   try {
-    const tle = await getTleByNorad(noradId);
-    if (!tle) return res.status(404).json({ error: "Satellite not found" });
-
-    const satrec = satellite.twoline2satrec(tle.tle_line1, tle.tle_line2);
-    const start = Date.now();
-    const points = [];
-
-    for (let i = 0; i < samples; i++) {
-      const time = new Date(start + i * stepMinutes * 60 * 1000);
-      const point = computeGeoPoint(satrec, time);
-      if (!point) continue;
-      points.push({ timestamp: time.toISOString(), ...point, altitude_ratio: point.altitude_km / EARTH_RADIUS_KM });
-    }
-
-    res.json({ noradId, samples: points.length, stepMinutes, points });
+    const [rows] = await db.query(
+      `SELECT s.name, s.norad_id, t.tle_line1, t.tle_line2
+       FROM satellites s
+       INNER JOIN tle_data t ON s.norad_id = t.norad_id`
+    );
+    const now = new Date();
+    const satellites = rows.map((row) => createPointPayload(row, now)).filter(Boolean);
+    res.json(satellites);
   } catch (error) {
-    if (!isDbUnavailable(error)) {
-      console.error("Orbit lookup failed:", error.message);
-      const { status, body } = getDatabaseErrorResponse(error);
-      return res.status(status).json(body);
-    }
+    // Fallback to active catalog if DB is down
     try {
-      const catalog = await fetchGroupFromCelestrak("active");
-      const tle = catalog.get(noradId);
-      if (!tle) return res.status(404).json({ error: "Satellite not found" });
-
-      const satrec = satellite.twoline2satrec(tle.tle_line1, tle.tle_line2);
-      const start = Date.now();
-      const points = [];
-
-      for (let i = 0; i < samples; i++) {
-        const time = new Date(start + i * stepMinutes * 60 * 1000);
-        const point = computeGeoPoint(satrec, time);
-        if (!point) continue;
-        points.push({ timestamp: time.toISOString(), ...point, altitude_ratio: point.altitude_km / EARTH_RADIUS_KM });
-      }
-
-      return res.json({ noradId, samples: points.length, stepMinutes, points });
-    } catch (fallbackError) {
-      console.error("Orbit fallback failed:", fallbackError.message);
-      return res.status(503).json({ error: "Satellite data unavailable" });
+      const byNorad = await fetchGroupFromCelestrak("active");
+      const now = new Date();
+      const fallback = Array.from(byNorad.entries()).map(([id, tle]) => 
+        createPointPayload({ name: tle.name, norad_id: id, ...tle }, now)
+      ).filter(Boolean);
+      res.json(fallback);
+    } catch (err) {
+      res.json([]);
     }
   }
 });
