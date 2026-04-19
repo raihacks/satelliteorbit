@@ -1,7 +1,6 @@
 const express = require("express");
 const axios = require("axios");
 const satellite = require("satellite.js");
-const { db, getDatabaseErrorResponse } = require("./db");
 const { Redis } = require("@upstash/redis"); //
 
 const router = express.Router();
@@ -40,19 +39,18 @@ async function getTleByNorad(noradId) {
     console.warn("KV Get Error:", err.message);
   }
 
-  const [rows] = await db.query(
-    "SELECT tle_line1, tle_line2 FROM tle_data WHERE norad_id = ? LIMIT 1",
-    [noradId]
-  );
-  
-  const result = rows?.[0] ?? null;
+  // Fallback to Celestrak
+  const url = `https://celestrak.org/NORAD/elements/gp.php?CATNR=${noradId}&FORMAT=tle`;
+  const response = await axios.get(url, { timeout: 10000 });
+  const lines = response.data.trim().split("\n");
+  if (lines.length < 3) return null;
 
-  if (result) {
-    try {
-      await redis.set(cacheKey, result, { ex: TLE_CACHE_TTL_SECONDS });
-    } catch (err) {
-      console.warn("KV Set Error:", err.message);
-    }
+  const result = { tle_line1: lines[1].trim(), tle_line2: lines[2].trim() };
+
+  try {
+    await redis.set(cacheKey, result, { ex: TLE_CACHE_TTL_SECONDS });
+  } catch (err) {
+    console.warn("KV Set Error:", err.message);
   }
 
   return result;
@@ -169,8 +167,17 @@ router.get("/:norad", async (req, res) => {
   if (!noradId) return res.status(400).json({ error: "Invalid NORAD ID" });
 
   try {
-    const tle = await getTleByNorad(noradId);
-    if (!tle) return res.status(404).json({ error: "Satellite not found" });
+    // 1. Try cache/DB first
+    let tle = await getTleByNorad(noradId).catch(() => null);
+
+    // 2. Fallback to Celestrak if not found
+    if (!tle || !tle.tle_line1 || !tle.tle_line2) {
+      const url = `https://celestrak.org/NORAD/elements/gp.php?CATNR=${noradId}&FORMAT=tle`;
+      const response = await axios.get(url, { timeout: 10000 });
+      const lines = response.data.trim().split("\n");
+      if (lines.length < 3) return res.status(404).json({ error: "Satellite not found" });
+      tle = { tle_line1: lines[1].trim(), tle_line2: lines[2].trim() };
+    }
 
     const satrec = satellite.twoline2satrec(tle.tle_line1, tle.tle_line2);
     const now = new Date();
@@ -178,31 +185,21 @@ router.get("/:norad", async (req, res) => {
 
     res.json({ noradId, tle_line1: tle.tle_line1, tle_line2: tle.tle_line2, timestamp: now.toISOString(), ...point });
   } catch (error) {
+    console.error("Track error:", error.message);
     res.status(500).json({ error: "Server error" });
   }
 });
 
 router.get("/", async (_req, res) => {
   try {
-    const [rows] = await db.query(
-      `SELECT s.name, s.norad_id, t.tle_line1, t.tle_line2
-       FROM satellites s
-       INNER JOIN tle_data t ON s.norad_id = t.norad_id`
-    );
+    const byNorad = await fetchGroupFromCelestrak("active");
     const now = new Date();
-    const satellites = rows.map((row) => createPointPayload(row, now)).filter(Boolean);
-    res.json(satellites);
-  } catch (error) {
-    try {
-      const byNorad = await fetchGroupFromCelestrak("active");
-      const now = new Date();
-      const fallback = Array.from(byNorad.entries()).map(([id, tle]) => 
-        createPointPayload({ name: tle.name, norad_id: id, ...tle }, now)
-      ).filter(Boolean);
-      res.json(fallback);
-    } catch (err) {
-      res.json([]);
-    }
+    const result = Array.from(byNorad.entries()).map(([id, tle]) =>
+      createPointPayload({ name: tle.name, norad_id: id, ...tle }, now)
+    ).filter(Boolean);
+    res.json(result);
+  } catch (err) {
+    res.json([]);
   }
 });
 
