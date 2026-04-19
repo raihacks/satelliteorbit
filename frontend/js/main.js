@@ -3,8 +3,7 @@ import { createRenderer } from "./core/renderer.js";
 import { createControls } from "./core/controls.js";
 import { createEarth } from "./earth/earth.js";
 import { SatelliteManager } from "./satellite/satelliteManager.js";
-// import { fetchTLECatalog } from "./api/fetchTLECatalog.js";
- 
+
 const viewer        = document.getElementById("viewer");
 const noradInput    = document.getElementById("norad");
 const trackButton   = document.getElementById("track-btn");
@@ -89,7 +88,6 @@ function renderSatPills() {
     pill.className = "sat-pill";
     if (selectedSatellite?.norad === sat.norad) pill.classList.add("active");
  
-    // Color the pill border to match the satellite type color
     const hex = '#' + sat.defaultColor.toString(16).padStart(6, '0');
     pill.style.borderColor = hex;
     pill.style.color = hex;
@@ -145,11 +143,10 @@ async function handleTrackSatellite() {
   trackButton.disabled = true;
   setStatus(`Loading NORAD ${norad}...`);
   try {
-    // CHANGE: Fetch from your API to use the 'tle:norad' KV cache
+
     const res = await fetch(`/api/satellite/${norad}`);
 const satData = await res.json();
-// Then map satData.tle_line1 to tle1, etc.
-    
+
     if (!satData) throw new Error("Satellite not found in active catalog.");
 
     const sat = satellites.addSatelliteFromTle({
@@ -171,7 +168,6 @@ const satData = await res.json();
 async function handleLoadAllSatellites() {
   const catalogGroup = catalogGroupEl?.value || "active";
  
-  // Store current group in the manager for color/type resolution
   satellites.currentCatalogGroup = catalogGroup;
  
   loadAllButton.disabled = true;
@@ -179,9 +175,6 @@ async function handleLoadAllSatellites() {
   setStatus(`Loading ${catalogGroup} satellites... checking cache.`);
  
   try {
-    /** * CHANGE: Instead of using fetchTLECatalog(catalogGroup) which hits Celestrak,
-     * we fetch directly from YOUR backend API. This triggers the Upstash KV logic.
-     */
     const response = await fetch(`/api/satellite/catalog/${encodeURIComponent(catalogGroup)}`);
     
     if (!response.ok) {
@@ -189,11 +182,9 @@ async function handleLoadAllSatellites() {
     }
 
     const catalog = await response.json();
- 
-    // Add the satellites to the 3D scene
+
     satellites.addSatellitesFromCatalog(catalog, catalogGroup);
- 
-    // Auto-select the first satellite if none are selected
+
     if (!selectedSatellite && satellites.satellites.length > 0) {
       selectSatellite(satellites.satellites[0]);
     }

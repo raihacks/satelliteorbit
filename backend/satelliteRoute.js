@@ -12,7 +12,7 @@ const redis = new Redis({
 });
 
 const EARTH_RADIUS_KM = 6371;
-const TLE_CACHE_TTL_SECONDS = 3600; // Cache for 1 hour
+const TLE_CACHE_TTL_SECONDS = 3600; 
 
 function deg(rad) {
   return (rad * 180) / Math.PI;
@@ -32,7 +32,6 @@ function isDbUnavailable(error) {
 }
 
 async function getTleByNorad(noradId) {
-  // 1. Try KV Cache first
   const cacheKey = `tle:${noradId}`;
   try {
     const cached = await redis.get(cacheKey);
@@ -41,7 +40,6 @@ async function getTleByNorad(noradId) {
     console.warn("KV Get Error:", err.message);
   }
 
-  // 2. Try MySQL Database
   const [rows] = await db.query(
     "SELECT tle_line1, tle_line2 FROM tle_data WHERE norad_id = ? LIMIT 1",
     [noradId]
@@ -49,7 +47,6 @@ async function getTleByNorad(noradId) {
   
   const result = rows?.[0] ?? null;
 
-  // 3. Save to KV if found in DB
   if (result) {
     try {
       await redis.set(cacheKey, result, { ex: TLE_CACHE_TTL_SECONDS });
@@ -84,11 +81,9 @@ function parseTleCatalog(text) {
 async function fetchGroupFromCelestrak(group) {
   const cacheKey = `catalog:${group}`;
 
-  // 1. Try KV Cache
   try {
     const cachedData = await redis.get(cacheKey);
     if (cachedData) {
-      // Upstash returns objects; convert back to Map for compatibility
       return new Map(Object.entries(cachedData));
     }
   } catch (err) {
@@ -110,7 +105,6 @@ async function fetchGroupFromCelestrak(group) {
       const byNorad = parseTleCatalog(response.data);
       
       if (byNorad.size > 0) {
-        // 2. Store in KV Cache (convert Map to Object for JSON storage)
         try {
           const plainObj = Object.fromEntries(byNorad);
           await redis.set(cacheKey, plainObj, { ex: TLE_CACHE_TTL_SECONDS });
@@ -154,7 +148,6 @@ function createPointPayload(row, now) {
   };
 }
 
-// Routes
 router.get("/catalog/:group", async (req, res) => {
   const group = String(req.params.group || "active").trim().toLowerCase();
   try {
@@ -189,7 +182,6 @@ router.get("/:norad", async (req, res) => {
   }
 });
 
-// GET /api/satellite (List all)
 router.get("/", async (_req, res) => {
   try {
     const [rows] = await db.query(
@@ -201,7 +193,6 @@ router.get("/", async (_req, res) => {
     const satellites = rows.map((row) => createPointPayload(row, now)).filter(Boolean);
     res.json(satellites);
   } catch (error) {
-    // Fallback to active catalog if DB is down
     try {
       const byNorad = await fetchGroupFromCelestrak("active");
       const now = new Date();

@@ -53,19 +53,16 @@ export function createSatelliteMarker(nameOrGroup = '') {
     marker,
     targetPosition: new THREE.Vector3(),
 
-    // satellite info
     norad: null,
     name: null,
     satrec: null,
     latestData: null,
 
-    // orbit visuals
     orbitLine: null,
     altitudeLine: null,
     groundLine: null,
     groundTrackPoints: [],
 
-    // colors
     defaultColor: colors.default,
     hoverColor: colors.hover,
     selectedColor: colors.selected
