@@ -152,7 +152,12 @@ const satData = await res.json();
     
     if (!satData) throw new Error("Satellite not found in active catalog.");
 
-    const sat = satellites.addSatelliteFromTle(satData);
+    const sat = satellites.addSatelliteFromTle({
+  norad: satData.noradId,
+  name: satData.name || `NORAD ${norad}`,
+  tle1: satData.tle_line1,
+  tle2: satData.tle_line2,
+});
     selectSatellite(sat, `Tracking NORAD ${norad}.`);
     satellites.update();
     focusCameraOnSatellite(sat);

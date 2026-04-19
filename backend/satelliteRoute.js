@@ -6,11 +6,10 @@ const { Redis } = require("@upstash/redis"); //
 
 const router = express.Router();
 
-// Initialize Upstash KV client
 const redis = new Redis({
-  url: "https://good-arachnid-99752.upstash.io",
-  token: "gQAAAAAAAYWoAAIncDE4MTFkNDRmOTVhZDI0MGFkOGIzYjhjNTE4MzFjYWM0NHAxOTk3NTI",
-}); //
+  url: process.env.UPSTASH_REDIS_URL,
+  token: process.env.UPSTASH_REDIS_TOKEN,
+});
 
 const EARTH_RADIUS_KM = 6371;
 const TLE_CACHE_TTL_SECONDS = 3600; // Cache for 1 hour
@@ -184,7 +183,7 @@ router.get("/:norad", async (req, res) => {
     const now = new Date();
     const point = computeGeoPoint(satrec, now);
 
-    res.json({ noradId, timestamp: now.toISOString(), ...point });
+    res.json({ noradId, tle_line1: tle.tle_line1, tle_line2: tle.tle_line2, timestamp: now.toISOString(), ...point });
   } catch (error) {
     res.status(500).json({ error: "Server error" });
   }
