@@ -3,7 +3,7 @@ import { createRenderer } from "./core/renderer.js";
 import { createControls } from "./core/controls.js";
 import { createEarth } from "./earth/earth.js";
 import { SatelliteManager } from "./satellite/satelliteManager.js";
-import { fetchTLECatalog } from "./api/fetchTLECatalog.js";
+// import { fetchTLECatalog } from "./api/fetchTLECatalog.js";
  
 const viewer        = document.getElementById("viewer");
 const noradInput    = document.getElementById("norad");
