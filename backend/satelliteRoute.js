@@ -11,7 +11,7 @@ const redis = new Redis({
 });
 
 const EARTH_RADIUS_KM = 6371;
-const TLE_CACHE_TTL_SECONDS = 8100; 
+const TLE_CACHE_TTL_SECONDS = 3600; 
 
 function deg(rad) {
   return (rad * 180) / Math.PI;
